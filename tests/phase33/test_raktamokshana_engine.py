@@ -296,3 +296,80 @@ def test_procedure_logging_and_patient_history():
 
     assert len(history) >= 1
     assert history[0].procedure_id == log_res.procedure_id
+
+
+def test_siravedha_subclinical_coagulopathy_restriction():
+    """Verify Platelets >= 100k and INR <= 1.3 requirement specifically for Siravedha."""
+    # 1. Siravedha with borderline low platelets (85,000 / uL) -> Restricted
+    req_platelet_drop = SafetyEvaluationRequest(
+        patient_id="PAT-HEMO-01",
+        hospital_id="HOSP-TEST-001",
+        modality=RaktamokshanaModality.SIRAVEDHA,
+        rogi_bala=RogiBala.MADHYAMA,
+        patient_age=40,
+        patient_weight_kg=70.0,
+        baseline_hemoglobin_g_dl=13.5,
+        platelet_count=85000,  # Below 100k limit for Siravedha
+        inr=1.1,
+        proposed_volume_ml=100.0,
+        vein_code="VD-SHAKHA-ADHA-01",
+    )
+    res = evaluate_raktamokshana_safety(req_platelet_drop)
+    assert res.cleared is False
+    assert res.firewall_status == "CODE_ORANGE_SUBCLINICAL_COAGULOPATHY_SIRAVEDHA_RESTRICTION"
+    assert res.recommended_modality == RaktamokshanaModality.JALAUKAVACHARANA
+
+    # 2. Siravedha with borderline elevated INR (1.35) -> Restricted
+    req_inr_rise = SafetyEvaluationRequest(
+        patient_id="PAT-HEMO-02",
+        hospital_id="HOSP-TEST-001",
+        modality=RaktamokshanaModality.SIRAVEDHA,
+        rogi_bala=RogiBala.MADHYAMA,
+        patient_age=40,
+        patient_weight_kg=70.0,
+        baseline_hemoglobin_g_dl=13.5,
+        platelet_count=180000,
+        inr=1.35,  # Above 1.3 limit for Siravedha
+        proposed_volume_ml=100.0,
+        vein_code="VD-SHAKHA-ADHA-01",
+    )
+    res = evaluate_raktamokshana_safety(req_inr_rise)
+    assert res.cleared is False
+    assert res.firewall_status == "CODE_ORANGE_SUBCLINICAL_COAGULOPATHY_SIRAVEDHA_RESTRICTION"
+
+    # 3. Jalaukavacharana for the same patient (platelets 85,000, INR 1.1) -> Cleared as safe alternative
+    req_jalauka_alt = SafetyEvaluationRequest(
+        patient_id="PAT-HEMO-03",
+        hospital_id="HOSP-TEST-001",
+        modality=RaktamokshanaModality.JALAUKAVACHARANA,
+        rogi_bala=RogiBala.MADHYAMA,
+        patient_age=40,
+        patient_weight_kg=70.0,
+        baseline_hemoglobin_g_dl=13.5,
+        platelet_count=85000,
+        inr=1.1,
+        species_id="JAL-NIR-KAPILA",
+        proposed_volume_ml=30.0,
+    )
+    res = evaluate_raktamokshana_safety(req_jalauka_alt)
+    assert res.cleared is True
+    assert res.firewall_status == "CLEARED"
+
+    # 4. Siravedha with normal hemostasis (Platelets 220,000, INR 1.05) -> Cleared
+    req_siravedha_ok = SafetyEvaluationRequest(
+        patient_id="PAT-HEMO-04",
+        hospital_id="HOSP-TEST-001",
+        modality=RaktamokshanaModality.SIRAVEDHA,
+        rogi_bala=RogiBala.MADHYAMA,
+        patient_age=40,
+        patient_weight_kg=70.0,
+        baseline_hemoglobin_g_dl=13.5,
+        platelet_count=220000,
+        inr=1.05,
+        proposed_volume_ml=100.0,
+        vein_code="VD-SHAKHA-ADHA-01",
+    )
+    res = evaluate_raktamokshana_safety(req_siravedha_ok)
+    assert res.cleared is True
+    assert res.firewall_status == "CLEARED"
+

@@ -18,6 +18,7 @@ from core.panchakarma import (
     get_panchakarma_plan,
     list_plan_vegas,
     record_bedside_vega,
+    verify_decoction_saviryata_avadhi,
 )
 from models.panchakarma import (
     AntikiMilestone,
@@ -433,3 +434,44 @@ def test_atiyoga_detection_and_emergency_stambhana():
     finally:
         conn.close()
         tmpdir.cleanup()
+
+
+def test_saviryata_avadhi_microbial_countdown():
+    """Verify Sharangadhara Samhita / NABH AYUSH 24-hour decoction stability enforcement."""
+    base_time = 1700000000
+
+    # 1. Fresh decoction administered 4 hours after preparation (valid)
+    valid, elapsed, msg = verify_decoction_saviryata_avadhi(
+        prepared_at_timestamp=base_time,
+        administration_timestamp=base_time + (4 * 3600),
+    )
+    assert valid is True
+    assert elapsed == 4.0
+    assert "20.0h remaining" in msg
+
+    # 2. Decoction administered 23.5 hours after preparation (valid, near limit)
+    valid, elapsed, msg = verify_decoction_saviryata_avadhi(
+        prepared_at_timestamp=base_time,
+        administration_timestamp=base_time + int(23.5 * 3600),
+    )
+    assert valid is True
+    assert elapsed == 23.5
+    assert "0.5h remaining" in msg
+
+    # 3. Decoction administered 24.5 hours after preparation (EXPIRED - raises exception)
+    with pytest.raises(ClinicalGovernanceException) as exc_info:
+        verify_decoction_saviryata_avadhi(
+            prepared_at_timestamp=base_time,
+            administration_timestamp=base_time + int(24.5 * 3600),
+        )
+    assert exc_info.value.error_code == "SAVIRYATA_AVADHI_EXPIRED"
+    assert "exceeds the maximum permissible 24.0-hour" in str(exc_info.value)
+
+    # 4. Decoction with invalid future prep timestamp
+    with pytest.raises(ClinicalGovernanceException) as exc_info:
+        verify_decoction_saviryata_avadhi(
+            prepared_at_timestamp=base_time + 3600,
+            administration_timestamp=base_time,
+        )
+    assert exc_info.value.error_code == "INVALID_PREPARATION_TIMESTAMP"
+

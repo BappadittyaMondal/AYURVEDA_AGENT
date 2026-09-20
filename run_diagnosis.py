@@ -47,6 +47,8 @@ BENCHMARK_CASES = [
             systolic_bp=124,
             diastolic_bp=82,
             hemoglobin_g_dl=12.2,
+            is_pregnant=False,
+            age_years=48,
             current_medications=[]
         )
     },
@@ -69,6 +71,8 @@ BENCHMARK_CASES = [
             systolic_bp=130,
             diastolic_bp=85,
             hemoglobin_g_dl=14.0,
+            is_pregnant=False,
+            age_years=54,
             current_medications=[]
         )
     },
@@ -91,6 +95,8 @@ BENCHMARK_CASES = [
             systolic_bp=118,
             diastolic_bp=78,
             hemoglobin_g_dl=13.5,
+            is_pregnant=False,
+            age_years=36,
             current_medications=[]
         )
     },
@@ -113,6 +119,8 @@ BENCHMARK_CASES = [
             systolic_bp=126,
             diastolic_bp=80,
             hemoglobin_g_dl=13.8,
+            is_pregnant=False,
+            age_years=44,
             current_medications=[]
         )
     }

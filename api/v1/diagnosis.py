@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from api.dependencies import get_current_user, get_db_session
+from core.exceptions import IncompleteClinicalIntakeException, RedFlagEmergencyException
 from core.diagnosis_orchestrator import (
     CLASSICAL_DISEASE_PROFILES,
     countersign_diagnosis_episode,
@@ -30,7 +31,12 @@ def run_clinical_diagnosis_evaluation(
     Run autonomous multi-modular diagnostic synthesis, dual-coding (NAMASTE & ICD-11 TM2),
     Ama-Agni gating, and personalized polyherbal treatment formulation.
     """
-    return evaluate_clinical_diagnosis(intake, conn=conn)
+    try:
+        return evaluate_clinical_diagnosis(intake, conn=conn)
+    except IncompleteClinicalIntakeException as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.message)
+    except RedFlagEmergencyException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.message)
 
 
 @router.post("/episodes/{episode_id}/countersign", response_model=DiagnosisEpisodeResponse)

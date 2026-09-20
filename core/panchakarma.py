@@ -26,6 +26,7 @@ from models.panchakarma import (
     AntikiMilestone,
     BedsideVegaEntry,
     BedsideVegaRecord,
+    DecoctionBatchPreparation,
     PanchakarmaPlanCreate,
     PanchakarmaPlanResponse,
     PanchakarmaProcedure,
@@ -499,3 +500,44 @@ def evaluate_panchakarma_shuddhi(
         assessed_by_arn=req.assessed_by_arn,
         created_at=now,
     )
+
+
+# ==============================================================================
+# SAVIRYATA AVADHI (MICROBIAL STABILITY) VERIFICATION
+# ==============================================================================
+
+def verify_decoction_saviryata_avadhi(
+    prepared_at_timestamp: int,
+    administration_timestamp: Optional[int] = None
+) -> Tuple[bool, float, str]:
+    """
+    Enforces Sharangadhara Samhita / NABH AYUSH 24-hour microbial and enzymatic stability limit
+    (Saviryata Avadhi) on freshly prepared Kashayas and Kwathas.
+
+    If elapsed hours exceed 24.0, raises ClinicalGovernanceException(error_code="SAVIRYATA_AVADHI_EXPIRED").
+    """
+    now = administration_timestamp if administration_timestamp is not None else int(time.time())
+    if now < prepared_at_timestamp:
+        raise ClinicalGovernanceException(
+            "Invalid timestamp: Administration timestamp precedes preparation timestamp.",
+            error_code="INVALID_PREPARATION_TIMESTAMP"
+        )
+
+    elapsed_seconds = now - prepared_at_timestamp
+    elapsed_hours = round(elapsed_seconds / 3600.0, 2)
+
+    if elapsed_hours > 24.0:
+        raise ClinicalGovernanceException(
+            f"Saviryata Avadhi Expired: Decoction batch prepared {elapsed_hours:.1f} hours ago exceeds "
+            f"the maximum permissible 24.0-hour Ayurvedic pharmacopeial and microbial stability threshold "
+            f"(Sharangadhara Samhita / NABH AYUSH standards). Risk of microbial proliferation, fermentation, "
+            f"and secondary endotoxin formation. Discard batch immediately.",
+            error_code="SAVIRYATA_AVADHI_EXPIRED"
+        )
+
+    remaining_hours = round(24.0 - elapsed_hours, 2)
+    message = (
+        f"Decoction within valid Saviryata Avadhi ({elapsed_hours:.1f}h elapsed, "
+        f"{remaining_hours:.1f}h remaining before expiration)."
+    )
+    return True, elapsed_hours, message

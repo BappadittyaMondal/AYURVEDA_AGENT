@@ -3,6 +3,7 @@ import hashlib
 import json
 import sqlite3
 import time
+from enum import Enum
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Generator, Optional
@@ -43,6 +44,101 @@ def get_db(database_path: Optional[Path] = None) -> Generator[sqlite3.Connection
         yield conn
     finally:
         conn.close()
+
+
+class DatabaseEngineType(str, Enum):
+    SQLITE_WAL = "SQLITE_WAL"
+    POSTGRESQL_RLS = "POSTGRESQL_RLS"
+
+
+class DatabaseEngineAdapter:
+    """
+    Dual Database Engine Adapter.
+    Architectural abstraction enabling seamless operation across:
+    1. Local / Edge SQLite with Write-Ahead Logging (WAL) for rural clinics, offline OPDs, and local embedded nodes.
+    2. Apex Central PostgreSQL with Row-Level Security (RLS) for tertiary hospital clusters and high-concurrency cloud deployments.
+    """
+    def __init__(
+        self,
+        engine_type: DatabaseEngineType = DatabaseEngineType.SQLITE_WAL,
+        sqlite_path: Optional[Path] = None,
+        postgres_dsn: Optional[str] = None
+    ):
+        self.engine_type = engine_type
+        self.sqlite_path = sqlite_path
+        self.postgres_dsn = postgres_dsn
+
+    def get_connection(self) -> Any:
+        """Acquire a raw database connection according to the active engine type."""
+        if self.engine_type == DatabaseEngineType.SQLITE_WAL:
+            return get_sqlite_connection(self.sqlite_path)
+        elif self.engine_type == DatabaseEngineType.POSTGRESQL_RLS:
+            if not self.postgres_dsn:
+                raise ValueError("PostgreSQL DSN must be configured when using POSTGRESQL_RLS engine.")
+            try:
+                import psycopg2
+                conn = psycopg2.connect(self.postgres_dsn)
+                return conn
+            except ImportError:
+                raise RuntimeError(
+                    "psycopg2 library is required for POSTGRESQL_RLS mode. "
+                    "Install via 'pip install psycopg2-binary' or use SQLITE_WAL."
+                )
+        else:
+            raise ValueError(f"Unsupported database engine type: {self.engine_type}")
+
+    @contextmanager
+    def session(
+        self,
+        tenant_hospital_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        role: Optional[str] = None
+    ) -> Generator[Any, None, None]:
+        """
+        Session context manager enforcing multi-tenant isolation.
+        In PostgreSQL mode, applies Row-Level Security (RLS) session variables (SET app.current_hospital_id).
+        In SQLite mode, validates connection and provides transactional isolation.
+        """
+        conn = self.get_connection()
+        try:
+            if self.engine_type == DatabaseEngineType.POSTGRESQL_RLS and tenant_hospital_id:
+                cursor = conn.cursor()
+                cursor.execute("SET app.current_hospital_id = %s;", (tenant_hospital_id,))
+                if user_id:
+                    cursor.execute("SET app.current_user_id = %s;", (user_id,))
+                if role:
+                    cursor.execute("SET app.current_role = %s;", (role,))
+                cursor.close()
+            yield conn
+        finally:
+            conn.close()
+
+    def verify_engine_health(self) -> Dict[str, Any]:
+        """Validates database engine connectivity, latency, and security configuration."""
+        start = time.time()
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1;")
+            cursor.fetchone()
+            latency_ms = round((time.time() - start) * 1000.0, 2)
+
+            wal_enabled = False
+            if self.engine_type == DatabaseEngineType.SQLITE_WAL:
+                cursor.execute("PRAGMA journal_mode;")
+                row = cursor.fetchone()
+                wal_enabled = (row[0].upper() == "WAL") if row else False
+
+            cursor.close()
+            return {
+                "status": "HEALTHY",
+                "engine_type": self.engine_type.value,
+                "latency_ms": latency_ms,
+                "wal_enabled": wal_enabled,
+                "rls_enforced": self.engine_type == DatabaseEngineType.POSTGRESQL_RLS
+            }
+        finally:
+            conn.close()
 
 
 def append_audit_log(
@@ -1915,6 +2011,8 @@ def init_database(database_path: Optional[Path] = None) -> None:
                 unit_measure TEXT NOT NULL,
                 expiry_date TEXT NOT NULL,
                 is_quarantined INTEGER NOT NULL DEFAULT 0,
+                contains_schedule_e1 INTEGER NOT NULL DEFAULT 0,
+                certified_shodhana_batch_code TEXT,
                 created_at INTEGER NOT NULL,
                 FOREIGN KEY (hospital_id) REFERENCES hospitals(hospital_id) ON DELETE RESTRICT
             );
@@ -1931,9 +2029,29 @@ def init_database(database_path: Optional[Path] = None) -> None:
                 quantity_dispensed INTEGER NOT NULL,
                 pharmacist_user_id TEXT NOT NULL,
                 dispensed_at INTEGER NOT NULL,
+                safety_invariants_verified INTEGER NOT NULL DEFAULT 1,
+                two_physician_verified INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (lot_id) REFERENCES pharmacy_inventory_lots(lot_id) ON DELETE RESTRICT
             );
             """)
+
+            # Auto-migrate pharmacy tables if upgraded in existing databases
+            try:
+                cursor.execute("ALTER TABLE pharmacy_inventory_lots ADD COLUMN contains_schedule_e1 INTEGER NOT NULL DEFAULT 0;")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                cursor.execute("ALTER TABLE pharmacy_inventory_lots ADD COLUMN certified_shodhana_batch_code TEXT;")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                cursor.execute("ALTER TABLE dispensation_records ADD COLUMN safety_invariants_verified INTEGER NOT NULL DEFAULT 1;")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                cursor.execute("ALTER TABLE dispensation_records ADD COLUMN two_physician_verified INTEGER NOT NULL DEFAULT 0;")
+            except sqlite3.OperationalError:
+                pass
 
             # 104. Disaster Recovery Snapshot Catalog (Phase 49)
             cursor.execute("""

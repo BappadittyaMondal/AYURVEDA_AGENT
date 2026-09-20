@@ -62,3 +62,20 @@ class RecordNotFoundException(ClinicalGovernanceException):
             message=f"{entity} with ID '{identifier}' not found",
             error_code="RECORD_NOT_FOUND"
         )
+
+
+class IncompleteClinicalIntakeException(ClinicalGovernanceException):
+    """Raised when an intake is submitted missing mandatory vital or clinical parameters without override."""
+    def __init__(self, missing_fields: list):
+        self.missing_fields = missing_fields
+        message = f"INCOMPLETE CLINICAL INTAKE: Mandatory parameters missing {missing_fields}. Silent imputation prohibited."
+        super().__init__(message=message, error_code="INCOMPLETE_CLINICAL_INTAKE_REJECTED")
+
+
+class RedFlagEmergencyException(ClinicalGovernanceException):
+    """Raised when a presenting condition matches an acute surgical or medical emergency mimic requiring immediate transfer."""
+    def __init__(self, syndrome: str, critical_action: str):
+        self.syndrome = syndrome
+        self.critical_action = critical_action
+        message = f"CRITICAL RED FLAG INTERCEPTED: Suspected '{syndrome}'. Elective Ayurvedic therapy suspended. Action required: {critical_action}"
+        super().__init__(message=message, error_code="RED_FLAG_EMERGENCY_TRANSFER")

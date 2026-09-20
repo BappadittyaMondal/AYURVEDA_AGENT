@@ -212,6 +212,8 @@ def calculate_pediatric_posology(
 
     # Reconciled Recommended Pediatric Dose
     recommended = round((clark + cowling) / 2.0, 2)
+    # Clark's Weight Rule Safety Clamping: An age-based formula must NEVER overdose an underweight/malnourished child
+    recommended = min(recommended, round(clark, 2))
     # Ensure recommended does not exceed adult dose
     recommended = min(recommended, req.adult_dose_mg)
 

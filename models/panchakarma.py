@@ -95,6 +95,20 @@ class PurvaKarmaData(BaseModel):
     swedana_completed: bool = Field(..., description="Completion of Sarvanga Swedana (sudation)")
     pre_op_agi_score: float = Field(..., ge=0.0, le=3.0, description="AGI score from Phase 09 (< 1.80 mandatory)")
 
+class DecoctionBatchPreparation(BaseModel):
+    """
+    Decoction (Kwatha/Kashaya) batch tracking for Panchakarma administration.
+    Enforces classical Sharangadhara Samhita and NABH AYUSH 24-hour Saviryata Avadhi limit.
+    """
+    batch_id: str = Field(..., description="Unique batch identification number")
+    formulation_name: str = Field(..., description="Ayurvedic classical formulation name")
+    prepared_at_timestamp: int = Field(..., description="Epoch timestamp of preparation completion")
+    prepared_by_staff_id: str = Field(..., description="Ayurvedic pharmacist or nursing staff ID")
+    volume_prepared_ml: float = Field(..., ge=10.0, description="Volume of decoction prepared in mL")
+    intended_procedure: PanchakarmaProcedure = Field(..., description="Target Panchakarma procedure")
+    storage_temperature_celsius: Optional[float] = Field(default=None, description="Storage temperature in Celsius")
+    administration_timestamp: Optional[int] = Field(default=None, description="Actual or planned administration timestamp")
+
 
 class PanchakarmaPlanCreate(BaseModel):
     """Request to initiate a structured clinical Panchakarma procedure."""

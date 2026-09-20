@@ -24,7 +24,160 @@ from models.emergency_transfer import (
     EmergencyBreakGlassResponse,
     CriticalCareTransferRequest,
     CriticalCareTransferResponse,
+    News2TriageEvaluation,
+    PewsTriageEvaluation,
 )
+
+
+def calculate_news2(vitals: VitalSignsTelemetry) -> News2TriageEvaluation:
+    """Calculate National Early Warning Score 2 (NEWS2) for adult patients."""
+    # 1. Respiration rate
+    rr = vitals.respiratory_rate_bpm
+    if rr <= 8:
+        rr_score = 3
+    elif 9 <= rr <= 11:
+        rr_score = 1
+    elif 12 <= rr <= 20:
+        rr_score = 0
+    elif 21 <= rr <= 24:
+        rr_score = 2
+    else:  # >= 25
+        rr_score = 3
+
+    # 2. SpO2
+    spo2 = vitals.spo2_percentage
+    if spo2 <= 91.0:
+        spo2_score = 3
+    elif 92.0 <= spo2 <= 93.0:
+        spo2_score = 2
+    elif 94.0 <= spo2 <= 95.0:
+        spo2_score = 1
+    else:  # >= 96.0
+        spo2_score = 0
+
+    # 3. Systolic BP
+    sbp = vitals.systolic_bp
+    if sbp <= 90:
+        sbp_score = 3
+    elif 91 <= sbp <= 100:
+        sbp_score = 2
+    elif 101 <= sbp <= 110:
+        sbp_score = 1
+    elif 111 <= sbp <= 219:
+        sbp_score = 0
+    else:  # >= 220
+        sbp_score = 3
+
+    # 4. Pulse / Heart Rate
+    hr = vitals.heart_rate_bpm
+    if hr <= 40:
+        hr_score = 3
+    elif 41 <= hr <= 50:
+        hr_score = 1
+    elif 51 <= hr <= 90:
+        hr_score = 0
+    elif 91 <= hr <= 110:
+        hr_score = 1
+    elif 111 <= hr <= 130:
+        hr_score = 2
+    else:  # >= 131
+        hr_score = 3
+
+    # 5. Consciousness (GCS)
+    gcs = vitals.glasgow_coma_scale
+    cvpu_score = 0 if gcs >= 15 else 3
+
+    # 6. Temperature (Fahrenheit)
+    temp = vitals.temperature_fahrenheit
+    if temp <= 95.0:  # <= 35.0 C
+        temp_score = 3
+    elif 95.1 <= temp <= 96.8:  # 35.1 - 36.0 C
+        temp_score = 1
+    elif 96.9 <= temp <= 100.4:  # 36.1 - 38.0 C
+        temp_score = 0
+    elif 100.5 <= temp <= 102.2:  # 38.1 - 39.0 C
+        temp_score = 1
+    else:  # >= 102.3 F / 39.1 C
+        temp_score = 2
+
+    total = rr_score + spo2_score + sbp_score + hr_score + cvpu_score + temp_score
+    has_extreme_3 = any(s == 3 for s in [rr_score, spo2_score, sbp_score, hr_score, cvpu_score, temp_score])
+
+    if total >= 7 or has_extreme_3:
+        risk = "HIGH"
+        is_trigger = True
+    elif total >= 5:
+        risk = "MEDIUM"
+        is_trigger = False
+    else:
+        risk = "LOW"
+        is_trigger = False
+
+    return News2TriageEvaluation(
+        respiratory_rate_score=rr_score,
+        spo2_score=spo2_score,
+        systolic_bp_score=sbp_score,
+        heart_rate_score=hr_score,
+        consciousness_score=cvpu_score,
+        temperature_score=temp_score,
+        total_score=total,
+        risk_level=risk,
+        is_emergency_trigger=is_trigger
+    )
+
+
+def calculate_pews(
+    vitals: VitalSignsTelemetry,
+    behavior_score: int = 0,
+    cardiovascular_score: int = 0,
+    respiratory_score: int = 0
+) -> PewsTriageEvaluation:
+    """Calculate Pediatric Early Warning Score (PEWS) for children < 16 years."""
+    cv = cardiovascular_score
+    if cv == 0:
+        if vitals.heart_rate_bpm > 160 or vitals.heart_rate_bpm < 60:
+            cv = 3
+        elif vitals.heart_rate_bpm > 140:
+            cv = 2
+        elif vitals.heart_rate_bpm > 120:
+            cv = 1
+
+    resp = respiratory_score
+    if resp == 0:
+        if vitals.respiratory_rate_bpm > 50 or vitals.respiratory_rate_bpm < 10 or vitals.spo2_percentage < 90.0:
+            resp = 3
+        elif vitals.respiratory_rate_bpm > 40:
+            resp = 2
+        elif vitals.respiratory_rate_bpm > 30:
+            resp = 1
+
+    beh = behavior_score
+    if beh == 0 and vitals.glasgow_coma_scale < 12:
+        beh = 3
+    elif beh == 0 and vitals.glasgow_coma_scale < 15:
+        beh = 1
+
+    total = beh + cv + resp
+    has_extreme_3 = any(s == 3 for s in [beh, cv, resp])
+
+    if total >= 5 or has_extreme_3:
+        risk = "HIGH"
+        is_trigger = True
+    elif total >= 3:
+        risk = "MEDIUM"
+        is_trigger = False
+    else:
+        risk = "LOW"
+        is_trigger = False
+
+    return PewsTriageEvaluation(
+        behavior_score=beh,
+        cardiovascular_score=cv,
+        respiratory_score=resp,
+        total_score=total,
+        risk_level=risk,
+        is_emergency_trigger=is_trigger
+    )
 
 
 def evaluate_vital_instability(vitals: VitalSignsTelemetry) -> List[str]:
@@ -40,6 +193,27 @@ def evaluate_vital_instability(vitals: VitalSignsTelemetry) -> List[str]:
         flags.append(f"COMA / NEUROLOGICAL DEPRESSION: Unprotected airway risk (GCS {vitals.glasgow_coma_scale} < 9).")
     if vitals.heart_rate_bpm > 130 or vitals.heart_rate_bpm < 40:
         flags.append(f"CARDIAC ARRHYTHMIA RISK: Severe pulse disturbance ({vitals.heart_rate_bpm} bpm).")
+
+    # Multi-parameter Triage (NEWS2 for adults, PEWS for pediatrics) - Task 1.3
+    if vitals.patient_age_years is not None and vitals.patient_age_years < 16:
+        pews = calculate_pews(vitals)
+        vitals.pews_score = pews.total_score
+        vitals.triage_risk_level = pews.risk_level
+        if pews.is_emergency_trigger:
+            flags.append(
+                f"PEDIATRIC EARLY WARNING SYSTEM ALERT [PEWS_CRITICAL]: PEWS Score {pews.total_score} "
+                f"(Risk: {pews.risk_level}). Immediate pediatric ICU transfer required."
+            )
+    else:
+        news2 = calculate_news2(vitals)
+        vitals.news2_score = news2.total_score
+        vitals.triage_risk_level = news2.risk_level
+        if news2.is_emergency_trigger:
+            flags.append(
+                f"NATIONAL EARLY WARNING SCORE ALERT [NEWS2_CRITICAL]: NEWS2 Score {news2.total_score} "
+                f"(Risk: {news2.risk_level}). NABH COP.6 break-glass transfer triggered."
+            )
+
     return flags
 
 

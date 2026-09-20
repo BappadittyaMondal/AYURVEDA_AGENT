@@ -17,6 +17,8 @@ class PharmacyLotCreate(BaseModel):
     unit_measure: str = Field("BOTTLE_60_TABS", description="Unit measure (BOTTLE, VIAL, STRIP, BOX_KG)")
     expiry_date: str = Field(..., description="Expiry date in YYYY-MM-DD")
     is_quarantined: bool = Field(False, description="Whether lot is under quarantine/hold")
+    contains_schedule_e1: bool = Field(False, description="Whether lot contains Schedule E(1) poisonous substance")
+    certified_shodhana_batch_code: Optional[str] = Field(None, description="Certified Shodhana purification batch identifier")
 
 
 class PharmacyLotRecord(BaseModel):
@@ -30,6 +32,8 @@ class PharmacyLotRecord(BaseModel):
     unit_measure: str
     expiry_date: str
     is_quarantined: bool
+    contains_schedule_e1: bool = False
+    certified_shodhana_batch_code: Optional[str] = None
     created_at: int
 
 
@@ -40,6 +44,11 @@ class DispensationCreate(BaseModel):
     lot_id: str = Field(..., description="Inventory lot ID being dispensed from")
     quantity_dispensed: int = Field(..., gt=0, description="Quantity to decrement from inventory")
     pharmacist_user_id: str = Field(..., description="User ID of dispensing pharmacist")
+    is_pregnant: Optional[bool] = Field(None, description="Active pregnancy status")
+    active_allopathic_medications: List[str] = Field(default_factory=list, description="Concurrent modern medications")
+    primary_prescriber_arn: Optional[str] = Field(None, description="Prescribing NCISM Physician ARN")
+    secondary_physician_countersign_arn: Optional[str] = Field(None, description="Second physician ARN for Schedule E(1) signoff")
+    verified_shodhana_batch_code: Optional[str] = Field(None, description="Verified Shodhana batch reference")
 
 
 class DispensationRecord(BaseModel):
@@ -52,3 +61,5 @@ class DispensationRecord(BaseModel):
     pharmacist_user_id: str
     dispensed_at: int
     remaining_stock_units: int
+    safety_invariants_verified: bool = True
+    two_physician_verified: bool = False

@@ -40,6 +40,8 @@ class GovernanceStatus(str, Enum):
     DRAFT_DECISION_SUPPORT = "DRAFT_DECISION_SUPPORT"
     PHYSICIAN_COUNTERSIGNED = "PHYSICIAN_COUNTERSIGNED"
     REJECTED_BY_PHYSICIAN = "REJECTED_BY_PHYSICIAN"
+    EMERGENCY_TRANSFER_TRIGGERED = "EMERGENCY_TRANSFER_TRIGGERED"
+    INCOMPLETE_CLINICAL_INTAKE_REJECTED = "INCOMPLETE_CLINICAL_INTAKE_REJECTED"
 
 
 class ShodhanaEligibility(str, Enum):
@@ -82,6 +84,26 @@ class DualMorbidityCode(BaseModel):
     confidence_score: float = Field(ge=0.0, le=1.0)
 
 
+class RedFlagScreeningResult(BaseModel):
+    """Screening outcome for acute Western surgical and medical emergency mimics (M1)."""
+    mimic_detected: bool = False
+    suspected_syndrome: Optional[str] = None
+    presenting_mimic: Optional[str] = None
+    critical_action_required: Optional[str] = None
+    vital_triggers: List[str] = Field(default_factory=list)
+    emergency_facility_type: Optional[str] = None
+
+
+class RankedDifferentialItem(BaseModel):
+    """Ranked differential diagnosis entry with pathognomonic markers (Vyavachhedaka Lakshana)."""
+    rank: int
+    diagnosis: DualMorbidityCode
+    classical_probability: float
+    vyavachhedaka_lakshana: str
+    pertinent_negatives: List[str] = Field(default_factory=list)
+    pertinent_positives: List[str] = Field(default_factory=list)
+
+
 class PrescribedFormulation(BaseModel):
     """Polyherbal medicinal formulation with dosage, timing, and anupana vehicle."""
     formulation_name: str
@@ -120,7 +142,12 @@ class ComprehensiveTreatmentPlan(BaseModel):
 
 
 class ClinicalIntakeData(BaseModel):
-    """Patient clinical intake presentation and examination findings."""
+    """Patient clinical intake presentation and examination findings.
+    
+    Silent defaults on physiological vitals and Rogi Bala have been eliminated to prevent
+    unsubstantiated clinical decisions (Audit Recommendation C1). Incomplete intakes
+    must fail closed unless explicit preliminary assessment override is granted.
+    """
     patient_id: str
     hospital_id: str
     chief_complaints: List[str]
@@ -133,12 +160,19 @@ class ClinicalIntakeData(BaseModel):
     appetite_and_digestion: Optional[str] = None
     vitiated_srotases: Optional[List[str]] = None
     vitiated_dhatus: Optional[List[str]] = None
-    rogi_bala: RogiBalaGrade = RogiBalaGrade.MADHYAMA
-    systolic_bp: int = 120
-    diastolic_bp: int = 80
-    hemoglobin_g_dl: float = 13.0
-    is_pregnant: bool = False
+    rogi_bala: Optional[RogiBalaGrade] = None
+    systolic_bp: Optional[int] = None
+    diastolic_bp: Optional[int] = None
+    hemoglobin_g_dl: Optional[float] = None
+    is_pregnant: Optional[bool] = None
+    age_years: Optional[int] = None
+    heart_rate_bpm: Optional[int] = None
+    respiratory_rate_bpm: Optional[int] = None
+    spo2_percentage: Optional[float] = None
+    temperature_fahrenheit: Optional[float] = None
     current_medications: List[str] = Field(default_factory=list)
+    allow_preliminary_assessment: bool = False
+    emergency_override_rationale: Optional[str] = None
 
 
 class CounterSignRequest(BaseModel):
@@ -155,17 +189,21 @@ class DiagnosisEpisodeResponse(BaseModel):
     hospital_id: str
     primary_diagnosis: DualMorbidityCode
     differential_diagnoses: List[DualMorbidityCode]
+    ranked_differentials: List[RankedDifferentialItem] = Field(default_factory=list)
+    red_flag_screening: Optional[RedFlagScreeningResult] = None
     vikriti_vector: Dict[str, float]
     vikriti_divergence_metric: float
     agni_status: AgniStatus
     ama_status: AmaStatus
     shat_kriya_kala_stage: ShatKriyaKalaStage
-    rogi_bala: RogiBalaGrade
+    rogi_bala: Optional[RogiBalaGrade] = None
     doshic_dushya_sammurchhana: Dict[str, Any]
     treatment_protocol: ComprehensiveTreatmentPlan
     safety_firewalls_cleared: bool
     safety_alerts: List[str]
     governance_status: GovernanceStatus
+    is_preliminary_assessment: bool = False
+    missing_vital_parameters: List[str] = Field(default_factory=list)
     attending_physician_arn: Optional[str] = None
     countersigned_at: Optional[int] = None
     patient_summary_report_markdown: str

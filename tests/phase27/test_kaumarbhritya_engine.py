@@ -113,6 +113,30 @@ def test_pediatric_posology_clark_cowling_sharngadhara():
     assert res_toddler.recommended_pediatric_dose_mg == 91.67
 
 
+def test_pediatric_posology_underweight_malnourished_clamping():
+    """Verify that an underweight/malnourished child's dosage is strictly clamped by Clark's rule."""
+    # Underweight 3-year-old (36 months, but weight only 8.0 kg instead of normal 14 kg)
+    # Clark = (8.0 / 70) * 500 = 57.14 mg
+    # Cowling = ((3 + 1) / 24) * 500 = 83.33 mg
+    # Without clamp, average would be 70.24 mg (overdose!)
+    # With Clark clamp, dose must be strictly clamped to 57.14 mg
+    req_malnourished = PediatricDosageCalculationRequest(
+        patient_id="PAT-PEDIATRIC-MALNOURISHED",
+        age_months=36,
+        weight_kg=8.0,
+        adult_dose_mg=500.0,
+        formulation_name="Vidangadi Churna",
+        contains_heavy_metals_or_schedule_e1=False,
+        evaluator_arn="AY-DL-2024-998811",
+    )
+    res = calculate_pediatric_posology(req_malnourished)
+    assert res.clark_dose_mg == 57.14
+    assert res.cowling_dose_mg == 83.33
+    assert res.recommended_pediatric_dose_mg == 57.14
+    assert res.recommended_pediatric_dose_mg <= res.clark_dose_mg
+
+
+
 def test_pediatric_toxicology_firewall_ksheerada_infant():
     """Verify Schedule E-1 or heavy metals in infant (< 12 months) triggers safety exception."""
     req_toxic = PediatricDosageCalculationRequest(

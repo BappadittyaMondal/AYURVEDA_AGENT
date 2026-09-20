@@ -137,3 +137,71 @@ def test_break_glass_and_transfer_lifecycle(conn):
     # Confirm event status updated to TRANSFERRED_TO_ICU
     updated_event = get_break_glass_event(resp.event_id, conn=conn)
     assert updated_event.status == BreakGlassStatus.TRANSFERRED_TO_ICU
+
+
+def test_news2_calculation():
+    """Verify NEWS2 calculation accurately scores deterioration across all 6 physiological parameters."""
+    from core.emergency_transfer import calculate_news2
+
+    # Normal adult vitals -> NEWS2 score = 0, Low Risk
+    normal_vitals = VitalSignsTelemetry(
+        systolic_bp=120,
+        diastolic_bp=80,
+        heart_rate_bpm=72,
+        respiratory_rate_bpm=16,
+        spo2_percentage=98.0,
+        glasgow_coma_scale=15,
+        temperature_fahrenheit=98.6
+    )
+    news2_norm = calculate_news2(normal_vitals)
+    assert news2_norm.total_score == 0
+    assert news2_norm.risk_level == "LOW"
+    assert news2_norm.is_emergency_trigger is False
+
+    # Severe deterioration -> SBP 85 (3), SpO2 89 (3), RR 28 (3), HR 135 (3), GCS 12 (3) -> High Risk
+    critical_vitals = VitalSignsTelemetry(
+        systolic_bp=85,
+        diastolic_bp=50,
+        heart_rate_bpm=135,
+        respiratory_rate_bpm=28,
+        spo2_percentage=89.0,
+        glasgow_coma_scale=12,
+        temperature_fahrenheit=103.0
+    )
+    news2_crit = calculate_news2(critical_vitals)
+    assert news2_crit.total_score >= 14
+    assert news2_crit.risk_level == "HIGH"
+    assert news2_crit.is_emergency_trigger is True
+
+
+def test_pews_calculation():
+    """Verify PEWS calculation accurately identifies pediatric critical deterioration."""
+    from core.emergency_transfer import calculate_pews
+
+    # Normal child vitals -> Low Risk
+    child_normal = VitalSignsTelemetry(
+        systolic_bp=100,
+        diastolic_bp=65,
+        heart_rate_bpm=95,
+        respiratory_rate_bpm=22,
+        spo2_percentage=99.0,
+        glasgow_coma_scale=15,
+        patient_age_years=7
+    )
+    pews_norm = calculate_pews(child_normal)
+    assert pews_norm.risk_level == "LOW"
+    assert pews_norm.is_emergency_trigger is False
+
+    # Critical child vitals -> severe tachycardia (>160), tachypnea (>50), desaturation -> High Risk
+    child_critical = VitalSignsTelemetry(
+        systolic_bp=75,
+        diastolic_bp=45,
+        heart_rate_bpm=165,
+        respiratory_rate_bpm=55,
+        spo2_percentage=88.0,
+        glasgow_coma_scale=10,
+        patient_age_years=4
+    )
+    pews_crit = calculate_pews(child_critical)
+    assert pews_crit.risk_level == "HIGH"
+    assert pews_crit.is_emergency_trigger is True

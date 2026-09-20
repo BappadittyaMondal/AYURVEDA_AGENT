@@ -60,7 +60,9 @@ def test_diagnosis_evaluation_endpoint(client_with_db):
         "rogi_bala": "MADHYAMA",
         "systolic_bp": 120,
         "diastolic_bp": 80,
-        "hemoglobin_g_dl": 13.0
+        "hemoglobin_g_dl": 13.0,
+        "is_pregnant": False,
+        "age_years": 48
     }
 
     resp = client_with_db.post("/api/v1/diagnosis/evaluate", json=intake_payload, headers=headers)
@@ -93,7 +95,12 @@ def test_countersign_endpoint_lifecycle(client_with_db):
         "symptoms": ["sciatica", "radiating leg pain", "suptata"],
         "duration_weeks": 3.0,
         "appetite_and_digestion": "VARIABLE_VISHAMAGNI",
-        "rogi_bala": "MADHYAMA"
+        "rogi_bala": "MADHYAMA",
+        "systolic_bp": 120,
+        "diastolic_bp": 80,
+        "hemoglobin_g_dl": 13.0,
+        "is_pregnant": False,
+        "age_years": 42
     }
     eval_resp = client_with_db.post("/api/v1/diagnosis/evaluate", json=intake, headers=headers)
     assert eval_resp.status_code == 201
@@ -140,3 +147,23 @@ def test_disease_catalog_endpoint(client_with_db):
     assert "Tamaka Shwasa" in names
     assert "Gridhrasi" in names
     assert "Sandhivata" in names
+
+
+def test_incomplete_intake_rejected_by_api(client_with_db):
+    """Verify missing mandatory parameters without override are rejected with 422 HTTP status."""
+    login_resp = client_with_db.post(
+        "/api/v1/auth/login",
+        json={"username": "physician_rmp", "password": "Physician@AIIA2026"},
+    )
+    token = login_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    incomplete_payload = {
+        "patient_id": "PAT-DIAG-API-01",
+        "hospital_id": "aiia-delhi-central-001",
+        "chief_complaints": ["Knee pain"],
+        "symptoms": ["sandhi-shula"]
+    }
+    resp = client_with_db.post("/api/v1/diagnosis/evaluate", json=incomplete_payload, headers=headers)
+    assert resp.status_code == 422
+    assert "Mandatory parameters missing" in resp.json()["detail"]

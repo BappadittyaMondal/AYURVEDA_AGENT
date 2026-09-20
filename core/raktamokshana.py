@@ -677,6 +677,24 @@ def evaluate_raktamokshana_safety(
                 estimated_post_op_hb_g_dl=req.baseline_hemoglobin_g_dl
             )
 
+        # 3b. Subclinical Coagulopathy Siravedha Restriction (Platelets < 100,000/uL or INR > 1.3)
+        if req.modality == RaktamokshanaModality.SIRAVEDHA and (req.platelet_count < 100000 or req.inr > 1.3):
+            return SafetyEvaluationResponse(
+                cleared=False,
+                firewall_status="CODE_ORANGE_SUBCLINICAL_COAGULOPATHY_SIRAVEDHA_RESTRICTION",
+                reason=(
+                    f"Subclinical coagulopathy detected for invasive venesection (Siravedha) "
+                    f"(Platelets: {req.platelet_count}/uL, INR: {req.inr}). "
+                    "Siravedha requires Platelets >= 100,000/uL and INR <= 1.3 to prevent delayed venous hemorrhage. "
+                    "Jalaukavacharana (max 1-2 leeches, <= 30 mL) is the recommended alternative."
+                ),
+                max_permissible_volume_ml=30.0,
+                recommended_modality=RaktamokshanaModality.JALAUKAVACHARANA,
+                suggested_hemostasis=HemostasisMethod.SANDHANA,
+                post_procedure_nutritional_replenishment=replenishment,
+                estimated_post_op_hb_g_dl=estimate_post_op_hemoglobin(req.baseline_hemoglobin_g_dl, 30.0)
+            )
+
         # 4. Hemodynamic Shock / Severe Hypotension Firewall
         map_bp = (req.systolic_bp + 2 * req.diastolic_bp) / 3.0
         if req.systolic_bp < 90 or map_bp < 65.0:

@@ -34,6 +34,29 @@ class BreakGlassStatus(str, Enum):
     CANCELLED = "CANCELLED"
 
 
+class News2TriageEvaluation(BaseModel):
+    """National Early Warning Score 2 (NEWS2) validation for adults >= 16 years."""
+    respiratory_rate_score: int
+    spo2_score: int
+    systolic_bp_score: int
+    heart_rate_score: int
+    consciousness_score: int
+    temperature_score: int
+    total_score: int
+    risk_level: str  # "LOW", "MEDIUM", "HIGH"
+    is_emergency_trigger: bool  # Total >= 7 OR single parameter 3
+
+
+class PewsTriageEvaluation(BaseModel):
+    """Pediatric Early Warning Score (PEWS) validation for children < 16 years."""
+    behavior_score: int
+    cardiovascular_score: int
+    respiratory_score: int
+    total_score: int
+    risk_level: str  # "LOW", "MEDIUM", "HIGH"
+    is_emergency_trigger: bool  # Total >= 5 OR single parameter 3
+
+
 class VitalSignsTelemetry(BaseModel):
     """Real-time physiological telemetry triggering break-glass threshold."""
     systolic_bp: int = Field(..., ge=40, le=260, description="Systolic Blood Pressure mmHg")
@@ -43,6 +66,10 @@ class VitalSignsTelemetry(BaseModel):
     spo2_percentage: float = Field(..., ge=40.0, le=100.0, description="Pulse oximetry oxygen saturation")
     glasgow_coma_scale: int = Field(..., ge=3, le=15, description="Glasgow Coma Scale total score")
     temperature_fahrenheit: float = Field(default=98.6, ge=90.0, le=108.0)
+    patient_age_years: Optional[int] = None
+    news2_score: Optional[int] = None
+    pews_score: Optional[int] = None
+    triage_risk_level: Optional[str] = None
 
 
 class SbarHandoverReport(BaseModel):

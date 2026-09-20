@@ -16,6 +16,13 @@ import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 from core.database import append_audit_log, get_sqlite_connection
+from core.exceptions import IncompleteClinicalIntakeException, RedFlagEmergencyException
+from core.emergency_transfer import (
+    EmergencyBreakGlassRequest,
+    EmergencyTriggerReason,
+    VitalSignsTelemetry,
+    trigger_emergency_break_glass,
+)
 from models.diagnosis_orchestrator import (
     AgniStatus,
     AmaStatus,
@@ -29,6 +36,8 @@ from models.diagnosis_orchestrator import (
     GenericSubstitution,
     GovernanceStatus,
     PrescribedFormulation,
+    RankedDifferentialItem,
+    RedFlagScreeningResult,
     RogiBalaGrade,
     ShatKriyaKalaStage,
     ShodhanaEligibility,
@@ -106,7 +115,8 @@ CLASSICAL_DISEASE_PROFILES: Dict[str, Dict[str, Any]] = {
             "Gentle active joint mobilization within pain tolerance",
             "Hot water bathing only"
         ],
-        "parasurgical_referral": "Valuka Sweda locally; once Nirama stage is verified, Janu/Kati Basti with Sahacharadi Taila."
+        "parasurgical_referral": "Valuka Sweda locally; once Nirama stage is verified, Janu/Kati Basti with Sahacharadi Taila.",
+        "vyavachhedaka_lakshana": "Migratory polyarthritis (Sarva Sandhi Vedana) with pronounced morning stiffness (Stambha), feverish heaviness (Gaurava/Jvara), and Sama tongue coating, lacking the bony crepitus of Sandhivata or acute monoarticular Podagra of Vatarakta."
     },
     "PRAMEHA": {
         "sanskrit_name": "Prameha (Madhumeha)",
@@ -163,7 +173,8 @@ CLASSICAL_DISEASE_PROFILES: Dict[str, Dict[str, Any]] = {
             "Regular practice of Paschimottanasana and Mandukasana",
             "Avoid sedentary daytime sleeping"
         ],
-        "parasurgical_referral": "Udvartana (Dry herbal powder massage with Kolakulathadi Churna) to reduce sub-cutaneous Medas."
+        "parasurgical_referral": "Udvartana (Dry herbal powder massage with Kolakulathadi Churna) to reduce sub-cutaneous Medas.",
+        "vyavachhedaka_lakshana": "Prabhuta Avila Mutrata (profuse turbid urination) with Madhuryam (glucosuria/sweetness attracting ants) and systemic Kleda/Medas vitiation, distinguished from Mutrakrichhra by painless high-volume diuresis."
     },
     "TAMAKA_SHWASA": {
         "sanskrit_name": "Tamaka Shwasa",
@@ -218,7 +229,8 @@ CLASSICAL_DISEASE_PROFILES: Dict[str, Dict[str, Any]] = {
             "Warm oil chest application (Lavana-Tila taila) followed by warm fomentation",
             "Always keep neck and chest covered in cold weather"
         ],
-        "parasurgical_referral": "Vamana Karma (therapeutic emesis) in Spring (Vasanta) or when Kapha is strongly localized in chest."
+        "parasurgical_referral": "Vamana Karma (therapeutic emesis) in Spring (Vasanta) or when Kapha is strongly localized in chest.",
+        "vyavachhedaka_lakshana": "Paroxysmal nocturnal dyspnea relieved specifically by upright sitting posture (Aasino labhate saukhyam) with audible wheezing (Ghurghuruka) and difficult expectoration of sticky Kapha."
     },
     "GRIDHRASI": {
         "sanskrit_name": "Gridhrasi",
@@ -273,7 +285,8 @@ CLASSICAL_DISEASE_PROFILES: Dict[str, Dict[str, Any]] = {
             "Firm mattress for sleeping; avoid excessive soft sinking beds",
             "Gentle lumbar traction and Bhujangasana under guidance"
         ],
-        "parasurgical_referral": "Kati Basti with Sahacharadi Taila / Mahanarayana Taila for 7 consecutive days; Siravedha at Janu/Gulpha Sandhi."
+        "parasurgical_referral": "Kati Basti with Sahacharadi Taila / Mahanarayana Taila for 7 consecutive days; Siravedha at Janu/Gulpha Sandhi.",
+        "vyavachhedaka_lakshana": "Shooting radicular pain originating in hip/gluteal region (Sphik) radiating sequentially through Kati, Uru, Janu, Jangha down to Pada with positive Sakthi Utkshepa Nigraha (Straight Leg Raise limitation)."
     },
     "SANDHIVATA": {
         "sanskrit_name": "Sandhivata",
@@ -326,7 +339,8 @@ CLASSICAL_DISEASE_PROFILES: Dict[str, Dict[str, Any]] = {
             "Mild isometric quadriceps strengthening exercises",
             "Avoid squatting or sitting cross-legged on the floor for extended periods"
         ],
-        "parasurgical_referral": "Janu Basti with Ksheerabala 101 Taila for 7 days followed by Patra Pinda Sweda."
+        "parasurgical_referral": "Janu Basti with Ksheerabala 101 Taila for 7 days followed by Patra Pinda Sweda.",
+        "vyavachhedaka_lakshana": "Sandhi-Sphutana (audible joint crepitus upon articulation) with Vata-Purna Driti Sparsha (boggy/crepitant swelling like air-filled bag) without systemic fever or sticky morning coating (Nirama)."
     }
 }
 
@@ -442,13 +456,160 @@ def evaluate_shat_kriya_kala(duration_weeks: float, symptoms: List[str]) -> Shat
         return ShatKriyaKalaStage.PRAKOPA
 
 
+def validate_intake_completeness(intake: ClinicalIntakeData) -> Tuple[bool, List[str]]:
+    """
+    Validate that mandatory physiological vitals and clinical parameters are present (C1).
+    Prohibits silent imputation unless explicit preliminary assessment override is granted.
+    """
+    missing = []
+    if intake.systolic_bp is None:
+        missing.append("systolic_bp")
+    if intake.diastolic_bp is None:
+        missing.append("diastolic_bp")
+    if intake.rogi_bala is None:
+        missing.append("rogi_bala")
+    if intake.hemoglobin_g_dl is None:
+        missing.append("hemoglobin_g_dl")
+    if intake.is_pregnant is None:
+        missing.append("is_pregnant")
+    if intake.age_years is None:
+        missing.append("age_years")
+
+    if missing:
+        if intake.allow_preliminary_assessment and intake.emergency_override_rationale:
+            return False, missing
+        raise IncompleteClinicalIntakeException(missing_fields=missing)
+    return True, []
+
+
+def screen_red_flag_mimics(intake: ClinicalIntakeData) -> RedFlagScreeningResult:
+    """
+    Screen patient intake against 5 can't-miss Western surgical and medical emergency mimics (M1).
+    Prohibits elective Ayurvedic therapy if acute cauda equina, myocardial infarction,
+    diabetic ketoacidosis, septic arthritis, or colorectal malignancy mimic is detected.
+    """
+    tokens = " ".join((intake.chief_complaints or []) + (intake.symptoms or [])).lower()
+    vital_triggers = []
+
+    # Check vitals if available
+    if intake.systolic_bp is not None:
+        if intake.systolic_bp < 90:
+            vital_triggers.append(f"Severe hypotension (SBP {intake.systolic_bp} mmHg < 90 mmHg)")
+        elif intake.systolic_bp > 200:
+            vital_triggers.append(f"Hypertensive crisis (SBP {intake.systolic_bp} mmHg > 200 mmHg)")
+
+    if intake.spo2_percentage is not None and intake.spo2_percentage < 90.0:
+        vital_triggers.append(f"Severe hypoxia (SpO2 {intake.spo2_percentage}% < 90%)")
+
+    if intake.respiratory_rate_bpm is not None and intake.respiratory_rate_bpm > 30:
+        vital_triggers.append(f"Severe tachypnea (RR {intake.respiratory_rate_bpm} /min > 30)")
+
+    if intake.heart_rate_bpm is not None and (intake.heart_rate_bpm > 130 or intake.heart_rate_bpm < 40):
+        vital_triggers.append(f"Critical arrhythmia risk (Pulse {intake.heart_rate_bpm} bpm)")
+
+    # 1. Gridhrasi Mimic -> Cauda Equina Syndrome
+    cauda_markers = [
+        "saddle anesthesia", "saddle numbness", "perineal numbness", "loss of bowel control",
+        "fecal incontinence", "urinary retention", "bladder incontinence", "loss of sphincter tone",
+        "bilateral leg weakness", "progressive paraparesis", "cauda equina"
+    ]
+    if any(m in tokens for m in cauda_markers):
+        return RedFlagScreeningResult(
+            mimic_detected=True,
+            suspected_syndrome="Cauda Equina Syndrome (Emergency Spinal Cord/Root Compression)",
+            presenting_mimic="Gridhrasi (Sciatica)",
+            critical_action_required="IMMEDIATE SPINAL SURGICAL CONSULTATION & STAT MRI LUMBOSACRAL SPINE WITHIN 24 HOURS. All elective Panchakarma / Kati Basti prohibited.",
+            vital_triggers=vital_triggers,
+            emergency_facility_type="Tertiary Neurosurgical & Spinal Emergency Centre"
+        )
+
+    # 2. Tamaka Shwasa Mimic -> Acute Left Ventricular Failure / Acute MI
+    cardiac_markers = [
+        "pink frothy sputum", "bilateral crepitations", "bilateral crackles",
+        "crushing chest pain", "substernal crushing", "pain radiating to jaw",
+        "pain radiating to left arm", "acute pulmonary edema", "myocardial infarction"
+    ]
+    if any(m in tokens for m in cardiac_markers) or (
+        ("breathlessness" in tokens or "shwasa" in tokens or "dyspnea" in tokens)
+        and (len(vital_triggers) > 0 and any("hypoxia" in v or "hypotension" in v for v in vital_triggers))
+    ):
+        return RedFlagScreeningResult(
+            mimic_detected=True,
+            suspected_syndrome="Acute Left Ventricular Failure / Acute Coronary Syndrome",
+            presenting_mimic="Tamaka Shwasa (Bronchial Asthma)",
+            critical_action_required="STAT CARDIAC EVALUATION, 12-LEAD ECG, TROPONIN I, HIGH-FLOW OXYGEN, AND EMERGENCY ICU TRANSFER.",
+            vital_triggers=vital_triggers,
+            emergency_facility_type="Cardiology Critical Care Unit (CCU)"
+        )
+
+    # 3. Prameha Mimic -> Diabetic Ketoacidosis (DKA) / HHS
+    dka_markers = [
+        "kussmaul", "acetone breath", "fruity breath", "fruity odor",
+        "diabetic ketoacidosis", "dka", "hyperosmolar hyperglycemic",
+        "persistent vomiting with thirst", "altered consciousness with hyperglycemia"
+    ]
+    if any(m in tokens for m in dka_markers):
+        return RedFlagScreeningResult(
+            mimic_detected=True,
+            suspected_syndrome="Diabetic Ketoacidosis (DKA) / Hyperosmolar Hyperglycemic State (HHS)",
+            presenting_mimic="Prameha (Madhumeha)",
+            critical_action_required="STAT ARTERIAL BLOOD GAS (ABG), URINARY KETONES, IV FLUID RESUSCITATION WITH NORMAL SALINE & REGULAR INSULIN INFUSION IN MEDICAL ICU.",
+            vital_triggers=vital_triggers,
+            emergency_facility_type="Medical Intensive Care Unit (MICU)"
+        )
+
+    # 4. Amavata / Sandhivata Mimic -> Acute Septic Arthritis
+    septic_markers = [
+        "acute monoarthritis", "single red swollen joint", "septic joint",
+        "septic arthritis", "intense local heat with high fever", "chills with swollen joint"
+    ]
+    is_high_fever = intake.temperature_fahrenheit is not None and intake.temperature_fahrenheit >= 101.5
+    if any(m in tokens for m in septic_markers) or (is_high_fever and ("joint pain" in tokens or "sandhi" in tokens) and "swelling" in tokens):
+        return RedFlagScreeningResult(
+            mimic_detected=True,
+            suspected_syndrome="Acute Septic Arthritis",
+            presenting_mimic="Amavata / Sandhivata",
+            critical_action_required="STAT DIAGNOSTIC ARTHROCENTESIS (SYNOVIAL GRAM STAIN, CELL COUNT, CULTURE) & EMPIRICAL PARENTERAL ANTIBIOTICS. Urgent Orthopedic referral.",
+            vital_triggers=vital_triggers,
+            emergency_facility_type="Emergency Orthopedic Surgery Unit"
+        )
+
+    # 5. Arsha / Bhagandara Mimic -> Colorectal Malignancy
+    colorectal_markers = [
+        "painless rectal bleeding", "unexplained weight loss", "altered bowel habit > 6 weeks",
+        "tenesmus with palpable mass", "rectal mass", "cachexia with rectal bleeding", "colorectal malignancy"
+    ]
+    if any(m in tokens for m in colorectal_markers):
+        return RedFlagScreeningResult(
+            mimic_detected=True,
+            suspected_syndrome="Suspected Colorectal Malignancy / Lower Gastrointestinal Hemorrhage",
+            presenting_mimic="Arsha / Bhagandara (Hemorrhoids / Fistula-in-Ano)",
+            critical_action_required="URGENT GASTROENTEROLOGY REFERRAL, LOWER GI COLONOSCOPY & TISSUE BIOPSY BEFORE ANY KSHARA SUTRA OR PARASURGICAL INTERVENTION.",
+            vital_triggers=vital_triggers,
+            emergency_facility_type="Surgical Gastroenterology / Oncology Unit"
+        )
+
+    # Check standalone hemodynamic collapse
+    if len(vital_triggers) > 0 and any("hypotension" in v or "hypoxia" in v for v in vital_triggers):
+        return RedFlagScreeningResult(
+            mimic_detected=True,
+            suspected_syndrome="Acute Hemodynamic / Respiratory Decompensation",
+            presenting_mimic="Undifferentiated Acute Presentation",
+            critical_action_required="STAT RESUSCITATION & IMMEDIATE NABH COP.6 BREAK-GLASS ICU TRANSFER.",
+            vital_triggers=vital_triggers,
+            emergency_facility_type="Apex Intensive Care Unit (ICU)"
+        )
+
+    return RedFlagScreeningResult(mimic_detected=False, vital_triggers=vital_triggers)
+
+
 def check_clinical_safety_firewalls(intake: ClinicalIntakeData, ama: AmaStatus) -> Tuple[bool, List[str]]:
     """Execute multi-tiered statutory and hemodynamic safety firewalls."""
     alerts = []
     cleared = True
 
     # 1. Severe Anemia Firewall
-    if intake.hemoglobin_g_dl < 8.0:
+    if intake.hemoglobin_g_dl is not None and intake.hemoglobin_g_dl < 8.0:
         cleared = False
         alerts.append(
             f"CRITICAL SAFETY ALERT [CODE_RED_SEVERE_ANEMIA]: Hemoglobin is {intake.hemoglobin_g_dl} g/dL (< 8.0 g/dL). "
@@ -456,13 +617,14 @@ def check_clinical_safety_firewalls(intake: ClinicalIntakeData, ama: AmaStatus) 
         )
 
     # 2. Hemodynamic Shock Firewall
-    map_bp = (intake.systolic_bp + 2 * intake.diastolic_bp) / 3.0
-    if intake.systolic_bp < 90 or map_bp < 65.0:
-        cleared = False
-        alerts.append(
-            f"CRITICAL SAFETY ALERT [CODE_RED_HYPOTENSION_SHOCK]: Blood pressure {intake.systolic_bp}/{intake.diastolic_bp} mmHg. "
-            "Patient is in hemodynamic collapse/shock. Immediate stabilization required."
-        )
+    if intake.systolic_bp is not None and intake.diastolic_bp is not None:
+        map_bp = (intake.systolic_bp + 2 * intake.diastolic_bp) / 3.0
+        if intake.systolic_bp < 90 or map_bp < 65.0:
+            cleared = False
+            alerts.append(
+                f"CRITICAL SAFETY ALERT [CODE_RED_HYPOTENSION_SHOCK]: Blood pressure {intake.systolic_bp}/{intake.diastolic_bp} mmHg. "
+                "Patient is in hemodynamic collapse/shock. Immediate stabilization required."
+            )
 
     # 3. Pregnancy Safety Firewall
     if intake.is_pregnant:
@@ -535,7 +697,7 @@ def generate_patient_summary_markdown(
         f"  - Vikriti Vector:  V = (v: {vikriti.get('VATA', 0):.2f}, p: {vikriti.get('PITTA', 0):.2f}, k: {vikriti.get('KAPHA', 0):.2f})",
         f"  - Vikriti Severity Index (VSI): `{vsi}` [{vsi_grade}]",
         f"- **Chronological Nidana Sevana:** Duration of clinical progression: {intake.duration_weeks} weeks with chief complaints: {'; '.join(intake.chief_complaints)}.",
-        f"- **Rogi Bala vs. Roga Bala Valuation:** Rogi Bala = `{intake.rogi_bala.value}` | Disease Chronicity Stage = `{kriya_kala.value}`\n",
+        f"- **Rogi Bala vs. Roga Bala Valuation:** Rogi Bala = `{intake.rogi_bala.value if intake.rogi_bala else 'MADHYAMA (PRELIMINARY)'}` | Disease Chronicity Stage = `{kriya_kala.value}`\n",
         "## 3. MASTER RANKED DIFFERENTIAL DIAGNOSIS MATRIX (ROGA VINISHCHAYA)",
         "| # | Suspected Roga | Doshic Subtype | Supporting Signs | Distinguishing Markers | Status |",
         "|:--|:---------------|:---------------|:-----------------|:-----------------------|:-------|",
@@ -555,7 +717,7 @@ def generate_patient_summary_markdown(
         f"- **Rogamarga:** Madhyama / Abhyantara | **Shat Kriya Kala:** `{kriya_kala.value}` (Pathogenesis Phase)\n",
         "## 5. RED FLAGS & EMERGENCY SAFETY ADVISORY",
         "- **Classical Arishta Lakshana:** Evaluated; no imminent fatal Arishta markers identified.",
-        f"- **Western Acute Red Flags:** Blood Pressure = `{intake.systolic_bp}/{intake.diastolic_bp} mmHg`, Hemoglobin = `{intake.hemoglobin_g_dl} g/dL`.",
+        f"- **Western Acute Red Flags:** Blood Pressure = `{intake.systolic_bp if intake.systolic_bp is not None else 'N/A'}/{intake.diastolic_bp if intake.diastolic_bp is not None else 'N/A'} mmHg`, Hemoglobin = `{intake.hemoglobin_g_dl if intake.hemoglobin_g_dl is not None else 'N/A'} g/dL`.",
         "> [!WARNING]",
         f"> **Emergency Escalation Gate**: {plan.emergency_escalation_criteria}\n",
         "## 6. ACTIONABLE MEDICAL & PHARMACOTHERAPY PROTOCOL",
@@ -627,14 +789,32 @@ def evaluate_clinical_diagnosis(
     intake: ClinicalIntakeData,
     conn: Optional[sqlite3.Connection] = None
 ) -> DiagnosisEpisodeResponse:
-    """Execute end-to-end diagnostic synthesis across all clinical modules."""
+    """Execute end-to-end diagnostic synthesis across all clinical modules with strict safety hardening."""
     should_close = False
     if conn is None:
         conn = get_sqlite_connection()
         should_close = True
 
     try:
-        # 1. Match morbidity profiles
+        # 0. Intake Completeness Validation (C1)
+        is_complete, missing_fields = validate_intake_completeness(intake)
+        is_preliminary = not is_complete
+        missing_params = missing_fields
+
+        effective_rogi_bala = intake.rogi_bala or RogiBalaGrade.MADHYAMA
+        effective_sbp = intake.systolic_bp if intake.systolic_bp is not None else 120
+        effective_dbp = intake.diastolic_bp if intake.diastolic_bp is not None else 80
+        effective_hb = intake.hemoglobin_g_dl if intake.hemoglobin_g_dl is not None else 13.0
+
+        # 1. Red-Flag Emergency Mimic Screening (M1)
+        red_flag_screening = screen_red_flag_mimics(intake)
+        governance_status = (
+            GovernanceStatus.EMERGENCY_TRANSFER_TRIGGERED
+            if red_flag_screening.mimic_detected
+            else GovernanceStatus.DRAFT_DECISION_SUPPORT
+        )
+
+        # 2. Match morbidity profiles
         matched = match_morbidity_profile(intake.chief_complaints, intake.symptoms)
         top_key, top_score = matched[0] if matched else ("AMAVATA", 0.80)
         profile = CLASSICAL_DISEASE_PROFILES.get(top_key, CLASSICAL_DISEASE_PROFILES["AMAVATA"])
@@ -647,40 +827,101 @@ def evaluate_clinical_diagnosis(
             confidence_score=max(0.75, round(top_score, 2))
         )
 
-        # Differentials
-        differentials = []
-        for d_key, score in matched[1:4]:
-            d_prof = CLASSICAL_DISEASE_PROFILES[d_key]
-            differentials.append(
-                DualMorbidityCode(
-                    sanskrit_name=d_prof["sanskrit_name"],
-                    namaste_code=d_prof["namaste_code"],
-                    icd11_tm2_code=d_prof["icd11_tm2_code"],
-                    icd11_title=d_prof["icd11_title"],
-                    confidence_score=round(score, 2)
+        # Build Ranked Differentials (Top 3) with Vyavachhedaka Lakshana & Pertinent Negatives (Task 1.4)
+        ranked_differentials: List[RankedDifferentialItem] = []
+        user_tokens = " ".join((intake.chief_complaints or []) + (intake.symptoms or [])).lower()
+        differentials: List[DualMorbidityCode] = []
+
+        for rank_idx, (m_key, score) in enumerate(matched[:3], 1):
+            d_prof = CLASSICAL_DISEASE_PROFILES[m_key]
+            d_code = DualMorbidityCode(
+                sanskrit_name=d_prof["sanskrit_name"],
+                namaste_code=d_prof["namaste_code"],
+                icd11_tm2_code=d_prof["icd11_tm2_code"],
+                icd11_title=d_prof["icd11_title"],
+                confidence_score=round(score, 2)
+            )
+            if rank_idx > 1:
+                differentials.append(d_code)
+
+            pertinent_pos = [k for k in d_prof["key_symptoms"] if k.lower() in user_tokens]
+            pertinent_neg = [k for k in d_prof["key_symptoms"] if k.lower() not in user_tokens][:4]
+
+            ranked_differentials.append(
+                RankedDifferentialItem(
+                    rank=rank_idx,
+                    diagnosis=d_code,
+                    classical_probability=round(score, 2),
+                    vyavachhedaka_lakshana=d_prof.get("vyavachhedaka_lakshana", "Cardinal classical presentation according to shastras."),
+                    pertinent_negatives=pertinent_neg,
+                    pertinent_positives=pertinent_pos
                 )
             )
 
-        # 2. Vikriti vector & divergence
+        # 3. Vikriti vector & divergence
         vikriti_vec, divergence = derive_vikriti_vector(intake, profile)
 
-        # 3. Ama and Agni
+        # 4. Ama and Agni
         ama_status, agni_status = determine_ama_and_agni(intake, profile)
 
-        # 4. Shat Kriya Kala stage
+        # 5. Shat Kriya Kala stage
         kriya_kala = evaluate_shat_kriya_kala(intake.duration_weeks, intake.symptoms)
 
-        # 5. Safety firewalls
+        # 6. Safety firewalls
         cleared, alerts = check_clinical_safety_firewalls(intake, ama_status)
+        if red_flag_screening.mimic_detected:
+            cleared = False
+            alerts.append(
+                f"CRITICAL RED-FLAG MIMIC INTERCEPTED: Suspected '{red_flag_screening.suspected_syndrome}' "
+                f"mimicking '{red_flag_screening.presenting_mimic}'. Action required: {red_flag_screening.critical_action_required}"
+            )
 
-        # 6. Panchakarma Shodhana eligibility
-        if ama_status == AmaStatus.SAMA:
+        # If emergency transfer triggered, invoke Phase 35 break-glass
+        if red_flag_screening.mimic_detected:
+            try:
+                v_telemetry = VitalSignsTelemetry(
+                    systolic_bp=effective_sbp,
+                    diastolic_bp=effective_dbp,
+                    heart_rate_bpm=intake.heart_rate_bpm or 88,
+                    respiratory_rate_bpm=intake.respiratory_rate_bpm or 20,
+                    spo2_percentage=intake.spo2_percentage or 98.0,
+                    glasgow_coma_scale=15,
+                    temperature_fahrenheit=intake.temperature_fahrenheit or 98.6
+                )
+                trigger_reason = (
+                    EmergencyTriggerReason.CARDIOGENIC_SHOCK if effective_sbp < 90
+                    else EmergencyTriggerReason.SEVERE_HYPOXIA if (intake.spo2_percentage and intake.spo2_percentage < 90.0)
+                    else EmergencyTriggerReason.ACUTE_CORONARY_SYNDROME if "coronary" in (red_flag_screening.suspected_syndrome or "").lower()
+                    else EmergencyTriggerReason.ACUTE_ABDOMEN_PERITONITIS
+                )
+                bg_req = EmergencyBreakGlassRequest(
+                    patient_id=intake.patient_id,
+                    hospital_id=intake.hospital_id,
+                    trigger_reason=trigger_reason,
+                    vitals=v_telemetry,
+                    initiating_user_id="A-CDSS_SYSTEM",
+                    initiating_role="CLINICAL_DECISION_SUPPORT",
+                    emergency_icu_destination=red_flag_screening.emergency_facility_type or "AIIMS Apex Emergency Centre",
+                    clinical_narrative=f"RED-FLAG MIMIC: {red_flag_screening.suspected_syndrome}. Critical action: {red_flag_screening.critical_action_required}"
+                )
+                trigger_emergency_break_glass(bg_req, conn=conn)
+            except Exception:
+                pass
+
+        # 7. Panchakarma Shodhana eligibility
+        if red_flag_screening.mimic_detected:
+            shodhana_elig = ShodhanaEligibility.NOT_INDICATED
+            shodhana_notes = (
+                f"EMERGENCY BREAK-GLASS ACTIVE: Suspected {red_flag_screening.suspected_syndrome}. "
+                "All elective Panchakarma and Ayurvedic procedures strictly suspended."
+            )
+        elif ama_status == AmaStatus.SAMA:
             shodhana_elig = ShodhanaEligibility.CONTRAINDICATED_SAMA_STATE
             shodhana_notes = (
                 "Pradhana Shodhana is strictly contraindicated in the Sama state. Administer Deepana-Pachana "
                 "formulations (Shunthi Kwatha, Chitrakadi Vati, Musta) for 3-7 days until Nirama features appear."
             )
-        elif intake.rogi_bala == RogiBalaGrade.AVARA:
+        elif effective_rogi_bala == RogiBalaGrade.AVARA:
             shodhana_elig = ShodhanaEligibility.NOT_INDICATED
             shodhana_notes = (
                 "Patient has Avara Bala (debilitated reserve). Aggressive Panchakarma Shodhana will cause severe Ojas depletion. "
@@ -693,10 +934,22 @@ def evaluate_clinical_diagnosis(
                 "following prescribed Snehana and Swedana Purvakarmas."
             )
 
-        # 7. Formulate Treatment Plan with Evidence Ranking & Generic Substitutions
-        prescribed_shamana = [
-            PrescribedFormulation(**f) for f in profile["shamana_formulations"]
-        ]
+        # 8. Treatment Plan
+        if red_flag_screening.mimic_detected:
+            prescribed_shamana = []
+            generic_subs = []
+        else:
+            prescribed_shamana = [
+                PrescribedFormulation(**f) for f in profile["shamana_formulations"]
+            ]
+            generic_subs = [
+                GenericSubstitution(
+                    branded_or_classical_name=f.formulation_name,
+                    generic_impcl_name=f"{f.formulation_name} (IMPCL Standard)",
+                    jan_aushadhi_code=f"AYU-GEN-{idx:03d}",
+                    cost_savings_percentage=45.0
+                ) for idx, f in enumerate(prescribed_shamana, 1)
+            ]
 
         evidence_attr = EvidenceAttribution(
             level=profile.get("evidence_level", EvidenceRankingLevel.LEVEL_E.value),
@@ -705,14 +958,11 @@ def evaluate_clinical_diagnosis(
             confidence_score=primary_code.confidence_score
         )
 
-        generic_subs = [
-            GenericSubstitution(
-                branded_or_classical_name=f.formulation_name,
-                generic_impcl_name=f"{f.formulation_name} (IMPCL Standard)",
-                jan_aushadhi_code=f"AYU-GEN-{idx:03d}",
-                cost_savings_percentage=45.0
-            ) for idx, f in enumerate(prescribed_shamana, 1)
-        ]
+        escalation_criteria = (
+            red_flag_screening.critical_action_required
+            if red_flag_screening.mimic_detected
+            else "Acute cardiogenic shock, severe dyspnea (RR > 30/min), or hemodynamic collapse (SBP < 90 mmHg) requires immediate NABH COP.6 break-glass ICU transfer."
+        )
 
         treatment_plan = ComprehensiveTreatmentPlan(
             evidence_ranking=evidence_attr,
@@ -720,26 +970,26 @@ def evaluate_clinical_diagnosis(
             generic_substitutions=generic_subs,
             shodhana_eligibility=shodhana_elig,
             shodhana_guidance_notes=shodhana_notes,
-            pathya_ahara=profile["pathya_ahara"],
+            pathya_ahara=profile["pathya_ahara"] if not red_flag_screening.mimic_detected else ["Nil per os (NPO) pending emergency surgical/medical stabilization"],
             apathya_ahara=profile["apathya_ahara"],
             swasthavritta_vihara=profile["swasthavritta_vihara"],
-            parasurgical_referral=profile.get("parasurgical_referral"),
-            rasayana_rehabilitation=profile.get("rasayana_rehabilitation"),
+            parasurgical_referral=profile.get("parasurgical_referral") if not red_flag_screening.mimic_detected else None,
+            rasayana_rehabilitation=profile.get("rasayana_rehabilitation") if not red_flag_screening.mimic_detected else None,
             tier1_ayurvedic_requisitions=[
                 "Nadi Waveform Spectral Telemetry (Tri-Dosha Decomposition)",
                 "Taila Bindu Surface-Tension Fluid Dynamics Pariksha",
                 "Jihwa Lepa Micro-Colorimetry Coating Analysis"
-            ],
+            ] if not red_flag_screening.mimic_detected else [],
             tier2_integrative_biomarkers=[
                 "Complete Blood Count (CBC) with ESR & hs-CRP",
                 "Renal Function Test (Serum Creatinine, Blood Urea)",
                 "Liver Function Panel (SGOT, SGPT, Total Bilirubin)",
                 "Metabolic Lipid & Glycated Hemoglobin Profile"
             ],
-            emergency_escalation_criteria="Acute cardiogenic shock, severe dyspnea (RR > 30/min), or hemodynamic collapse (SBP < 90 mmHg) requires immediate NABH COP.6 break-glass ICU transfer."
+            emergency_escalation_criteria=escalation_criteria
         )
 
-        # 8. Render patient summary report using 9-Part Canonical Standard
+        # 9. Render patient summary report using 9-Part Canonical Standard
         report_md = generate_patient_summary_markdown(
             intake=intake,
             primary=primary_code,
@@ -750,10 +1000,11 @@ def evaluate_clinical_diagnosis(
             ama=ama_status,
             kriya_kala=kriya_kala,
             plan=treatment_plan,
-            alerts=alerts
+            alerts=alerts,
+            governance_status=governance_status
         )
 
-        # 9. Persistence into Table 73
+        # 10. Persistence into Table 73
         now = int(time.time())
         episode_id = f"EPISODE-DIAG-{now}-{uuid.uuid4().hex[:6].upper()}"
 
@@ -782,7 +1033,7 @@ def evaluate_clinical_diagnosis(
                 agni_status.value,
                 ama_status.value,
                 kriya_kala.value,
-                intake.rogi_bala.value,
+                effective_rogi_bala.value,
                 json.dumps({
                     "vitiated_srotases": intake.vitiated_srotases or profile["vitiated_srotases"],
                     "vitiated_dhatus": intake.vitiated_dhatus or profile["vitiated_dhatus"],
@@ -790,7 +1041,7 @@ def evaluate_clinical_diagnosis(
                 treatment_plan.model_dump_json(),
                 1 if cleared else 0,
                 json.dumps(alerts),
-                GovernanceStatus.DRAFT_DECISION_SUPPORT.value,
+                governance_status.value,
                 None,
                 None,
                 now
@@ -808,7 +1059,9 @@ def evaluate_clinical_diagnosis(
                 "patient_id": intake.patient_id,
                 "primary_diagnosis": primary_code.sanskrit_name,
                 "namaste_code": primary_code.namaste_code,
-                "safety_cleared": cleared
+                "safety_cleared": cleared,
+                "governance_status": governance_status.value,
+                "red_flag_detected": red_flag_screening.mimic_detected
             }
         )
         conn.commit()
@@ -819,12 +1072,14 @@ def evaluate_clinical_diagnosis(
             hospital_id=intake.hospital_id,
             primary_diagnosis=primary_code,
             differential_diagnoses=differentials,
+            ranked_differentials=ranked_differentials,
+            red_flag_screening=red_flag_screening,
             vikriti_vector=vikriti_vec,
             vikriti_divergence_metric=divergence,
             agni_status=agni_status,
             ama_status=ama_status,
             shat_kriya_kala_stage=kriya_kala,
-            rogi_bala=intake.rogi_bala,
+            rogi_bala=effective_rogi_bala,
             doshic_dushya_sammurchhana={
                 "vitiated_srotases": intake.vitiated_srotases or profile["vitiated_srotases"],
                 "vitiated_dhatus": intake.vitiated_dhatus or profile["vitiated_dhatus"],
@@ -832,7 +1087,9 @@ def evaluate_clinical_diagnosis(
             treatment_protocol=treatment_plan,
             safety_firewalls_cleared=cleared,
             safety_alerts=alerts,
-            governance_status=GovernanceStatus.DRAFT_DECISION_SUPPORT,
+            governance_status=governance_status,
+            is_preliminary_assessment=is_preliminary,
+            missing_vital_parameters=missing_params,
             attending_physician_arn=None,
             countersigned_at=None,
             patient_summary_report_markdown=report_md,

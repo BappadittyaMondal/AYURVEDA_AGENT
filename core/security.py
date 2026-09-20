@@ -6,7 +6,11 @@ import json
 import os
 import time
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from config.settings import get_settings
 from core.exceptions import AuthenticationFailedException, AuthorizationDeniedException
@@ -193,3 +197,71 @@ def authorize_action(role: ClinicalRole, action: ClinicalAction) -> None:
         raise AuthorizationDeniedException(
             f"Role '{role.value}' is not authorized to perform action '{action.value}'"
         )
+
+
+# ==============================================================================
+# ED25519 ASYMMETRIC CRYPTOGRAPHIC DIGITAL SIGNATURE SUITE
+# ==============================================================================
+
+def generate_ed25519_keypair() -> Tuple[str, str]:
+    """
+    Generates a high-security Ed25519 (Edwards-curve Digital Signature Algorithm) keypair.
+    Returns (private_key_hex, public_key_hex) as 64-character hex strings (32 raw bytes each).
+    """
+    private_key = ed25519.Ed25519PrivateKey.generate()
+    public_key = private_key.public_key()
+
+    priv_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+    pub_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw
+    )
+    return priv_bytes.hex(), pub_bytes.hex()
+
+
+def sign_prescription_ed25519(
+    prescription_payload: Dict[str, Any],
+    private_key_hex: str
+) -> str:
+    """
+    Cryptographically signs a clinical prescription or governance order using the practitioner's
+    private Ed25519 key. Canonicalizes JSON with deterministic sorting to prevent malleability.
+    """
+    canonical_bytes = json.dumps(
+        prescription_payload,
+        sort_keys=True,
+        separators=(",", ":")
+    ).encode("utf-8")
+
+    priv_key = ed25519.Ed25519PrivateKey.from_private_bytes(bytes.fromhex(private_key_hex))
+    signature = priv_key.sign(canonical_bytes)
+    return signature.hex()
+
+
+def verify_prescription_signature_ed25519(
+    prescription_payload: Dict[str, Any],
+    signature_hex: str,
+    public_key_hex: str
+) -> bool:
+    """
+    Verifies an Ed25519 cryptographic signature against the canonical prescription payload
+    and practitioner's registered public key.
+    Returns True if valid; False if forged, corrupted, or signature verification fails.
+    """
+    try:
+        canonical_bytes = json.dumps(
+            prescription_payload,
+            sort_keys=True,
+            separators=(",", ":")
+        ).encode("utf-8")
+
+        pub_key = ed25519.Ed25519PublicKey.from_public_bytes(bytes.fromhex(public_key_hex))
+        pub_key.verify(bytes.fromhex(signature_hex), canonical_bytes)
+        return True
+    except (InvalidSignature, ValueError, TypeError):
+        return False
+
