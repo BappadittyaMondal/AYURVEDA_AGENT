@@ -55,6 +55,7 @@ from api.v1.upakarma import router as upakarma_router
 from api.v1.vajikarana_tantra import router as vajikarana_tantra_router
 from api.v1.vikriti import router as vikriti_router
 from api.v1.vision_diagnostics import router as vision_diagnostics_router
+from api.v1.prescription_parser import router as prescription_parser_router
 
 api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(health_router)
@@ -112,6 +113,7 @@ api_v1_router.include_router(pharmacy_inventory_router)
 api_v1_router.include_router(disaster_recovery_router)
 api_v1_router.include_router(security_hardening_router)
 api_v1_router.include_router(production_readiness_router)
+api_v1_router.include_router(prescription_parser_router)
 
 
 

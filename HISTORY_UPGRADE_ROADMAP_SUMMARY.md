@@ -163,3 +163,42 @@ Following the completion of Phases 01–51 and the master audit by the Senior Me
    - **Clinical Diagnostic Demonstration:** All 4 benchmark cases (`run_diagnosis.py --demo`) pass with 100% accuracy and zero errors.
    - **Preservation & Non-Oscillation Invariant:** 100% preserved. Zero deletions or regressions in existing code or documentation.
 
+---
+
+## 6. CLINICAL PRESCRIPTION SHORTHAND, DOSAGE FORM (KALPANA) NORMALIZATION, VERNACULAR BOTANICAL TAXONOMY & MULTIMODAL HANDWRITTEN SLIP INGESTION SUB-SYSTEM
+
+### 6.1 Architectural Motivation & Operational Problem Statement
+Real-world OPD/IPD settings across tertiary and rural AYUSH hospitals present clinical input challenges:
+1. **Prescription Shorthand:** Physicians routinely write mixed allopathic and Ayurvedic frequency/timing abbreviations (e.g., `BD pc`, `TDS ac`, `HS`, `SOS`, `STAT`).
+2. **Dosage Form Abbreviation (Bhaishajya Kalpanas):** Formulations are commonly abbreviated as `Kw.`, `Kashayam`, `Chur.`, `Tab.`, `Vati`, `Av.`, `Ghr.`, `Tail.`, `Ar.`, `Asv.`, `Cap.`, or `Bhasm.`.
+3. **Vernacular Plant & Tree Aliases:** Patients, rural practitioners, and local herb gatherers refer to medicinal plants using state-specific vernacular or folk nomenclature (e.g., *Arjuna* as *Kahu* in Hindi/Punjabi or *Marudhamaram* in Tamil; *Guduchi* as *Giloy*, *Seenthil Kodi*, or *Tippa Teega*; *Nimba* as *Veppamaram*; *Bhallataka* as *Bhilawa* or *Serankottai*). Without a vernacular resolution engine, statutory Schedule E(1) toxic herbs written in colloquial language would bypass safety firewalls.
+4. **Handwritten Prescriptions (HTR/OCR):** Physical paper slips written in cursive medical handwriting require multimodal optical capture, contrast enhancement, cursive token segmentation, and ingestion buffering prior to RMP verification.
+
+### 6.2 Implemented Subsystem Components
+1. **Data Models (`models/prescription_parser.py`):**
+   - `ClinicalFrequency`: Standardized mapping for OD (once daily), BD (twice daily), TDS (thrice daily), QID (four times daily), HS (at bedtime), SOS (as needed), and STAT (immediately).
+   - `AushadhaSevanaKala`: Classical Ashtanga Hridaya 10-time posology mapping (Pragbhakta/AC, Adhobhakta/PC, Samabhakta/with food, Madhyabhakta, Antarabakta, Samudga, Muhurmuhu, Grasa, Grasantara, Nishi/HS).
+   - `VernacularHerbMatch`: Resolves colloquial tree/herb names to canonical Sanskrit and Botanical binomials, identifying part used, family, regional state language, and Schedule E(1) statutory poison flag.
+   - `ParsedPrescriptionItem`: Encapsulates formulation name, canonical `KalpanaForm`, raw abbreviation, dose amount, clinical frequency, classical administration timing, Anupana carrier liquid, duration, matched botanical entity, and Schedule E(1) alerts.
+   - `PrescriptionTextParseRequest` & `PrescriptionTextParseResponse`: API contracts for multi-item prescription dossier parsing.
+   - `HandwrittenImageUploadRequest`: Base64-encoded image ingestion payload with metadata for ABDM/FHIR alignment.
+
+2. **Parsing & Resolution Engine (`core/prescription_parser.py`):**
+   - `MEDICINE_TREE_VERNACULAR_REGISTRY`: Multi-lingual botanical taxonomy database mapping colloquial Hindi, Bengali, Tamil, Telugu, Malayalam, Marathi, Kannada, and Gujarati names.
+   - Automatic Schedule E(1) Poison Interception: Cross-references toxic botanicals (*Bhallataka/Bhilawa, Vatsanabha/Meetha Zahar, Kupilu/Kuchla, Jayapala/Jamalgota, Dhattura/Umathai*) even when written under local folk synonyms.
+   - Dosage Form Normalizer (`normalize_dosage_form`): Robust regex tokenizer matching 11+ Bhaishajya Kalpana forms and commercial galenicals.
+   - Clinical Frequency & Timing Parser: Extracts posology, frequency, and Anupana carrier liquid from unstructured clinical lines.
+   - Dossier Parser (`parse_prescription_text`): Processes complete unstructured multi-item slips and generates draft prescriptions requiring Registered Medical Practitioner (RMP) signoff under NABH AYUSH COP.6.
+
+3. **REST API Surface (`api/v1/prescription_parser.py`):**
+   - `POST /api/v1/prescription-parser/parse-text`: Parses unstructured multi-line prescription text into structured clinical items.
+   - `GET /api/v1/prescription-parser/resolve-herb`: Looks up vernacular, trade, or local tree/plant names and returns canonical Ayurvedic nomenclature.
+   - `GET /api/v1/prescription-parser/reference/dosage-forms`: Returns recognized dosage form patterns.
+   - `GET /api/v1/prescription-parser/reference/frequencies`: Returns recognized frequency abbreviations.
+   - `POST /api/v1/prescription-parser/upload-handwritten-image`: Ingests base64-encoded handwritten prescription slips into the multimodal OCR processing buffer with NABH COP.6 RMP governance metadata.
+
+4. **Validation & Verification (`tests/test_prescription_parser.py`):**
+   - 6 automated unit and integration tests verifying shorthand decoding, Kalpana normalization, vernacular plant tree resolution, Schedule E(1) toxic alert triggering, complete dossier parsing, and REST API endpoints.
+   - Total repository test suite: **424 passed, 0 failures (100% exit code 0)**.
+
+
