@@ -491,12 +491,15 @@ def screen_red_flag_mimics(intake: ClinicalIntakeData) -> RedFlagScreeningResult
     tokens = " ".join((intake.chief_complaints or []) + (intake.symptoms or [])).lower()
     vital_triggers = []
 
-    # Check vitals if available
+    # Check vitals if available (with pediatric threshold scaling)
+    is_pediatric = intake.age_years is not None and intake.age_years < 12
+    hypotension_threshold = 70 if (intake.age_years is not None and intake.age_years < 2) else (80 if is_pediatric else 90)
+
     if intake.systolic_bp is not None:
-        if intake.systolic_bp < 90:
-            vital_triggers.append(f"Severe hypotension (SBP {intake.systolic_bp} mmHg < 90 mmHg)")
-        elif intake.systolic_bp > 200:
-            vital_triggers.append(f"Hypertensive crisis (SBP {intake.systolic_bp} mmHg > 200 mmHg)")
+        if intake.systolic_bp < hypotension_threshold:
+            vital_triggers.append(f"Severe hypotension (SBP {intake.systolic_bp} mmHg < {hypotension_threshold} mmHg)")
+        elif intake.systolic_bp >= 200 or (intake.diastolic_bp is not None and intake.diastolic_bp >= 120):
+            vital_triggers.append(f"Hypertensive crisis (BP {intake.systolic_bp}/{intake.diastolic_bp} mmHg)")
 
     if intake.spo2_percentage is not None and intake.spo2_percentage < 90.0:
         vital_triggers.append(f"Severe hypoxia (SpO2 {intake.spo2_percentage}% < 90%)")
@@ -523,11 +526,13 @@ def screen_red_flag_mimics(intake: ClinicalIntakeData) -> RedFlagScreeningResult
             emergency_facility_type="Tertiary Neurosurgical & Spinal Emergency Centre"
         )
 
-    # 2. Tamaka Shwasa Mimic -> Acute Left Ventricular Failure / Acute MI
+    # 2. Tamaka Shwasa Mimic -> Acute Left Ventricular Failure / Acute MI / ACS
     cardiac_markers = [
         "pink frothy sputum", "bilateral crepitations", "bilateral crackles",
         "crushing chest pain", "substernal crushing", "pain radiating to jaw",
-        "pain radiating to left arm", "acute pulmonary edema", "myocardial infarction"
+        "pain radiating to left arm", "acute pulmonary edema", "myocardial infarction",
+        "retrosternal crushing", "crushing retrosternal", "retrosternal chest pain",
+        "radiation to jaw", "radiating to left jaw", "acute coronary syndrome", "cold sweat", "angina"
     ]
     if any(m in tokens for m in cardiac_markers) or (
         ("breathlessness" in tokens or "shwasa" in tokens or "dyspnea" in tokens)
@@ -560,11 +565,16 @@ def screen_red_flag_mimics(intake: ClinicalIntakeData) -> RedFlagScreeningResult
 
     # 4. Amavata / Sandhivata Mimic -> Acute Septic Arthritis
     septic_markers = [
-        "acute monoarthritis", "single red swollen joint", "septic joint",
+        "acute monoarthritis", "single red swollen joint", "single hot red joint",
+        "single red joint", "hot red joint", "septic joint",
         "septic arthritis", "intense local heat with high fever", "chills with swollen joint"
     ]
     is_high_fever = intake.temperature_fahrenheit is not None and intake.temperature_fahrenheit >= 101.5
-    if any(m in tokens for m in septic_markers) or (is_high_fever and ("joint pain" in tokens or "sandhi" in tokens) and "swelling" in tokens):
+    if any(m in tokens for m in septic_markers) or (
+        (is_high_fever or "high spiking rigors" in tokens or "rigors" in tokens)
+        and ("joint" in tokens or "sandhi" in tokens)
+        and ("hot" in tokens or "red" in tokens or "swollen" in tokens or "effusion" in tokens)
+    ):
         return RedFlagScreeningResult(
             mimic_detected=True,
             suspected_syndrome="Acute Septic Arthritis",
@@ -589,8 +599,59 @@ def screen_red_flag_mimics(intake: ClinicalIntakeData) -> RedFlagScreeningResult
             emergency_facility_type="Surgical Gastroenterology / Oncology Unit"
         )
 
-    # Check standalone hemodynamic collapse
-    if len(vital_triggers) > 0 and any("hypotension" in v or "hypoxia" in v for v in vital_triggers):
+    # 6. Udavarta / Gulma Mimic -> Acute Mechanical Bowel Obstruction / Peritonitis
+    bowel_obstruction_markers = [
+        "feculent vomiting", "total obstipation", "obstipation",
+        "rigid tympanitic abdomen", "abdominal rigidity", "absent bowel sounds",
+        "mechanical bowel obstruction", "strangulated hernia", "peritonitis"
+    ]
+    if any(m in tokens for m in bowel_obstruction_markers):
+        return RedFlagScreeningResult(
+            mimic_detected=True,
+            suspected_syndrome="Acute Mechanical Bowel Obstruction / Peritonitis (Acute Surgical Abdomen)",
+            presenting_mimic="Arsha / Udavarta / Gulma",
+            critical_action_required="STAT SURGICAL CONSULTATION, NIL BY MOUTH (NPO), NASOGASTRIC DECOMPRESSION & STAT ABDOMINAL X-RAY/CT. All basti and oral virechana strictly contraindicated.",
+            vital_triggers=vital_triggers,
+            emergency_facility_type="Emergency General Surgery Department"
+        )
+
+    # 7. Vataja Shiroroga / Suryavarta Mimic -> Acute Bacterial Meningitis / SAH
+    meningitis_markers = [
+        "nuchal rigidity", "neck stiffness", "kernig positive", "brudzinski",
+        "explosive headache", "thunderclap headache", "meningitis", "subarachnoid hemorrhage"
+    ]
+    if any(m in tokens for m in meningitis_markers) and (
+        "fever" in tokens or "photophobia" in tokens or "altered sensorium" in tokens or "vomiting" in tokens
+    ):
+        return RedFlagScreeningResult(
+            mimic_detected=True,
+            suspected_syndrome="Acute Bacterial Meningitis / Subarachnoid Hemorrhage (Acute Neuro-Emergency)",
+            presenting_mimic="Vataja Shiroroga / Suryavarta",
+            critical_action_required="STAT LUMBAR PUNCTURE / NON-CONTRAST CT HEAD, EMPIRICAL PARENTERAL ANTIBIOTICS & IMMEDIATE NEUROLOGICAL ICU TRANSFER. All Shirodhara/Nasya contraindicated.",
+            vital_triggers=vital_triggers,
+            emergency_facility_type="Neurological Critical Care Unit (Neuro-ICU)"
+        )
+
+    # 8. Malignant Hypertensive Crisis / Hypertensive Encephalopathy
+    if any("hypertensive crisis" in v.lower() for v in vital_triggers) or (
+        intake.systolic_bp is not None and intake.systolic_bp >= 200
+    ) or (
+        "papilledema" in tokens and ("headache" in tokens or "confusion" in tokens or "blurring" in tokens)
+    ):
+        return RedFlagScreeningResult(
+            mimic_detected=True,
+            suspected_syndrome="Malignant Hypertensive Emergency / Encephalopathy",
+            presenting_mimic="Vataja Shiroroga / Pittaja Raktapitta",
+            critical_action_required="STAT INTRAVENOUS ANTIHYPERTENSIVE TITRATION (LABETALOL / SODIUM NITROPRUSSIDE), STAT CT BRAIN, AND EMERGENCY ICU ADMISSION.",
+            vital_triggers=vital_triggers,
+            emergency_facility_type="Cardiovascular Critical Care Unit (CCU / MICU)"
+        )
+
+    # Check standalone hemodynamic collapse or hypoxia
+    if len(vital_triggers) > 0 and any(
+        "hypotension" in v or "hypoxia" in v or "tachypnea" in v or "arrhythmia" in v or "hypertensive" in v
+        for v in vital_triggers
+    ):
         return RedFlagScreeningResult(
             mimic_detected=True,
             suspected_syndrome="Acute Hemodynamic / Respiratory Decompensation",
@@ -616,10 +677,12 @@ def check_clinical_safety_firewalls(intake: ClinicalIntakeData, ama: AmaStatus) 
             "All invasive bloodletting (Raktamokshana) and aggressive Shodhana therapies are strictly prohibited."
         )
 
-    # 2. Hemodynamic Shock Firewall
+    # 2. Hemodynamic Shock Firewall (with pediatric threshold scaling)
     if intake.systolic_bp is not None and intake.diastolic_bp is not None:
         map_bp = (intake.systolic_bp + 2 * intake.diastolic_bp) / 3.0
-        if intake.systolic_bp < 90 or map_bp < 65.0:
+        hypotension_threshold = 70 if (intake.age_years is not None and intake.age_years < 2) else (80 if (intake.age_years is not None and intake.age_years < 12) else 90)
+        min_map = 50.0 if (intake.age_years is not None and intake.age_years < 2) else 65.0
+        if intake.systolic_bp < hypotension_threshold or map_bp < min_map:
             cleared = False
             alerts.append(
                 f"CRITICAL SAFETY ALERT [CODE_RED_HYPOTENSION_SHOCK]: Blood pressure {intake.systolic_bp}/{intake.diastolic_bp} mmHg. "

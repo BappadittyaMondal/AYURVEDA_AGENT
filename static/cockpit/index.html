@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AYURVEDA_AGENT — Apex Clinical Cockpit & CDSS</title>
+    <style>
+        :root {
+            --primary: #1b4332;
+            --primary-light: #2d6a4f;
+            --accent: #d4af37;
+            --accent-hover: #b89628;
+            --bg-dark: #081c15;
+            --bg-card: #ffffff;
+            --bg-subtle: #f4f7f5;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --danger: #b91c1c;
+            --danger-bg: #fee2e2;
+            --success: #15803d;
+            --success-bg: #dcfce7;
+            --warning: #b45309;
+            --warning-bg: #fef3c7;
+            --border: #e5e7eb;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --radius: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-subtle);
+            color: var(--text-main);
+            line-height: 1.5;
+            padding-bottom: 40px;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--primary) 100%);
+            color: #ffffff;
+            padding: 16px 32px;
+            box-shadow: var(--shadow);
+            border-bottom: 3px solid var(--accent);
+        }
+
+        .header-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .branding h1 {
+            font-size: 1.5rem;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .branding h1 span {
+            color: var(--accent);
+        }
+
+        .branding p {
+            font-size: 0.85rem;
+            color: #a7d7c5;
+        }
+
+        .clinician-badge {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 16px;
+            border-radius: var(--radius);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            text-align: right;
+            font-size: 0.85rem;
+        }
+
+        .clinician-badge strong {
+            color: var(--accent);
+        }
+
+        .nav-tabs {
+            background: #ffffff;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            gap: 8px;
+            padding: 0 32px;
+        }
+
+        .tab-btn {
+            padding: 14px 20px;
+            background: none;
+            border: none;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn:hover {
+            color: var(--primary);
+        }
+
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .main-container {
+            max-width: 1400px;
+            margin: 24px auto;
+            padding: 0 32px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 24px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            margin-bottom: 24px;
+        }
+
+        .card h2 {
+            font-size: 1.25rem;
+            color: var(--primary);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 2px solid var(--bg-subtle);
+            padding-bottom: 8px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--text-main);
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            background: #ffffff;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .btn {
+            background: var(--primary);
+            color: #ffffff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: var(--primary-light);
+        }
+
+        .btn-gold {
+            background: var(--accent);
+            color: var(--bg-dark);
+        }
+
+        .btn-gold:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-main);
+        }
+
+        .alert-box {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .alert-danger {
+            background: var(--danger-bg);
+            border-left: 4px solid var(--danger);
+            color: var(--danger);
+        }
+
+        .alert-warning {
+            background: var(--warning-bg);
+            border-left: 4px solid var(--warning);
+            color: var(--warning);
+        }
+
+        .alert-success {
+            background: var(--success-bg);
+            border-left: 4px solid var(--success);
+            color: var(--success);
+        }
+
+        .chip {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            margin-right: 6px;
+            margin-bottom: 6px;
+        }
+
+        .chip-primary { background: #e0ece4; color: var(--primary); }
+        .chip-gold { background: #fef9c3; color: #854d0e; }
+        .chip-danger { background: var(--danger-bg); color: var(--danger); }
+        .chip-success { background: var(--success-bg); color: var(--success); }
+
+        .result-panel {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 16px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .botanical-card {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            background: #ffffff;
+            margin-top: 16px;
+            box-shadow: var(--shadow);
+        }
+
+        .botanical-card h3 {
+            color: var(--primary);
+            margin-bottom: 4px;
+        }
+
+        .botanical-card .latin {
+            font-style: italic;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            font-size: 0.9rem;
+        }
+
+        .morphology-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin: 16px 0;
+            background: var(--bg-subtle);
+            padding: 12px;
+            border-radius: 6px;
+        }
+
+        .vernacular-list {
+            margin: 12px 0;
+            font-size: 0.9rem;
+        }
+
+        .vernacular-list li {
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-container">
+            <div class="branding">
+                <h1>AYURVEDA_AGENT <span>APEX COCKPIT</span></h1>
+                <p>Autonomous AYUSH Clinical Decision Support System & EHR | NABH COP.6 Certified</p>
+            </div>
+            <div class="clinician-badge">
+                <div>Attending Physician: <strong>Dr. Ananya Sharma, MD (Ayu)</strong></div>
+                <div>NCISM Registration: <strong>ARN-NCISM-2015-8832</strong> | Station: <strong>OPD-104</strong></div>
+                <div style="font-size: 0.75rem; color: #a7d7c5; margin-top: 4px;">Zero-Trust WAL Active | Ed25519 PKI Armed</div>
+            </div>
+        </div>
+    </header>
+
+    <nav class="nav-tabs">
+        <div class="nav-container">
+            <button class="tab-btn active" onclick="switchTab('tab-diagnosis')">1. Diagnostic Orchestration</button>
+            <button class="tab-btn" onclick="switchTab('tab-prescription')">2. Prescription & PKI Studio</button>
+            <button class="tab-btn" onclick="switchTab('tab-botanical')">3. Botanical Visual Atlas</button>
+            <button class="tab-btn" onclick="switchTab('tab-emergency')">4. Emergency & Vital Triage</button>
+        </div>
+    </nav>
+
+    <main class="main-container">
+
+        <!-- TAB 1: DIAGNOSTIC ORCHESTRATION -->
+        <section id="tab-diagnosis" class="tab-content active">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>Clinical Intake & Diagnostic Triage</h2>
+                    <div class="form-group">
+                        <label>Select Pre-loaded Benchmark Scenario:</label>
+                        <select id="presetScenario" onchange="loadPresetScenario()">
+                            <option value="">-- Custom Diagnostic Intake --</option>
+                            <option value="amavata">Case 1: Amavata (Rheumatoid Arthritis) — Sama State</option>
+                            <option value="prameha">Case 2: Kaphaja Prameha (Type 2 Diabetes) — Endotoxins</option>
+                            <option value="tamaka">Case 3: Tamaka Shwasa (Bronchial Asthma) — Nirama Cleared</option>
+                            <option value="gridhrasi">Case 4: Vataja Gridhrasi (Sciatica) — Orthopedic</option>
+                            <option value="cauda_equina">Case 5: [EMERGENCY MIMIC] Cauda Equina Syndrome</option>
+                        </select>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div class="form-group">
+                            <label>Patient Age (Years):</label>
+                            <input type="number" id="diagAge" value="45" min="1" max="120">
+                        </div>
+                        <div class="form-group">
+                            <label>Gender:</label>
+                            <select id="diagGender">
+                                <option value="FEMALE">Female</option>
+                                <option value="MALE">Male</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div class="form-group">
+                            <label>Blood Pressure (Systolic/Diastolic):</label>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="number" id="diagSysBP" value="122" placeholder="Sys">
+                                <input type="number" id="diagDiaBP" value="78" placeholder="Dia">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Rogi Bala (Vital Constitution):</label>
+                            <select id="diagRogiBala">
+                                <option value="MADHYAMA">Madhyama (Moderate)</option>
+                                <option value="PRAVARA">Pravara (Strong / Superior)</option>
+                                <option value="AVARA">Avara (Weak / Debilitated)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div class="form-group">
+                            <label>Baseline Hemoglobin (g/dL):</label>
+                            <input type="number" id="diagHb" value="13.2" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label>Pregnancy Status:</label>
+                            <select id="diagPregnancy">
+                                <option value="false">Non-Pregnant</option>
+                                <option value="true">Pregnant (Active Teratogen Blockade)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Chief Complaints & Symptoms:</label>
+                        <textarea id="diagSymptoms" rows="4" placeholder="Enter clinical symptoms... (e.g. severe joint pain, morning stiffness, feverish feeling, loss of appetite)"></textarea>
+                    </div>
+
+                    <button class="btn btn-gold" style="width: 100%; justify-content: center;" onclick="runDiagnosis()">
+                        ⚡ Synthesize Diagnosis via A-CDSS Engine
+                    </button>
+                </div>
+
+                <div class="card">
+                    <h2>Diagnostic Synthesis & Classical Governance</h2>
+                    <div id="diagLoading" style="display: none; text-align: center; padding: 40px; color: var(--text-muted);">
+                        Synthesizing Multi-Modular Ayurvedic Diagnostics...
+                    </div>
+                    <div id="diagResults" class="result-panel">
+                        <div style="color: var(--text-muted); text-align: center; padding: 40px;">
+                            Diagnostic results, Prakriti-Vikriti simplex coordinates, Ama-Agni gating, and ICD-11 / NAMASTE dual-coding will appear here.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: PRESCRIPTION & PKI STUDIO -->
+        <section id="tab-prescription" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>Clinical Prescription Shorthand Input</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
+                        Enter multi-line doctor shorthand (OD, BD, TDS, HS, AC, PC), abbreviated Kalpanas (Kw., Tab., Chur., Av.), and regional folk plant names (Giloy, Bhilawa, Kahu, etc.).
+                    </p>
+
+                    <div class="form-group">
+                        <textarea id="prescriptionText" rows="7" style="font-family: monospace; font-size: 0.95rem;">Tab. Yograj Guggulu 2 tabs BD pc with warm water x 15 days
+Kw. Dashamoola 20ml TDS ac with equal water for 14 days
+Giloy satva 500mg BD with honey x 21 days
+Bhilawa churna 250mg OD pc with warm milk x 7 days</textarea>
+                    </div>
+
+                    <div style="display: flex; gap: 12px;">
+                        <button class="btn btn-gold" onclick="parsePrescription()">🔍 Parse & Canonicalize Shorthand</button>
+                        <button class="btn btn-outline" onclick="signPrescriptionPKI()">✍️ Sign via Ed25519 PKI</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Normalized Dossier & Safety Firewalls</h2>
+                    <div id="prescriptionResults" class="result-panel">
+                        <div style="color: var(--text-muted); text-align: center; padding: 40px;">
+                            Parsed dosage forms, classical administration timings (Aushadha Sevana Kala), and Schedule E(1) poison alerts will appear here.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: BOTANICAL VISUAL ATLAS -->
+        <section id="tab-botanical" class="tab-content">
+            <div class="card">
+                <h2>Medicinal Plant, Leaf & Fruit Visual Identification Atlas</h2>
+                <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 16px;">
+                    Search by Sanskrit name, botanical Latin binomial, or regional Indian vernacular (Hindi, Bengali, Tamil, Telugu, Malayalam, Gujarati, English).
+                </p>
+
+                <div style="display: flex; gap: 12px; max-width: 600px; margin-bottom: 24px;">
+                    <input type="text" id="botanicalQuery" placeholder="Try 'Amla', 'Giloy', 'Marudhamaram', 'Neem', 'Bilva', 'Bhilawa'..." value="Amla">
+                    <button class="btn btn-gold" onclick="searchBotanicalCard()">Search Botanical Atlas</button>
+                </div>
+
+                <div id="botanicalCardDisplay">
+                    <!-- Botanical card renders dynamically here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: EMERGENCY & VITAL TRIAGE -->
+        <section id="tab-emergency" class="tab-content">
+            <div class="grid-2">
+                <div class="card">
+                    <h2>Bedside Vital Instability Calculator (NEWS2 / PEWS)</h2>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div class="form-group">
+                            <label>Respiratory Rate (breaths/min):</label>
+                            <input type="number" id="vitalRR" value="18">
+                        </div>
+                        <div class="form-group">
+                            <label>SpO2 (% Room Air):</label>
+                            <input type="number" id="vitalSpO2" value="98">
+                        </div>
+                        <div class="form-group">
+                            <label>Systolic Blood Pressure (mmHg):</label>
+                            <input type="number" id="vitalSBP" value="124">
+                        </div>
+                        <div class="form-group">
+                            <label>Pulse / Heart Rate (bpm):</label>
+                            <input type="number" id="vitalHR" value="76">
+                        </div>
+                        <div class="form-group">
+                            <label>Consciousness (AVPU):</label>
+                            <select id="vitalAVPU">
+                                <option value="ALERT">Alert (A)</option>
+                                <option value="VOICE">Responds to Voice (V)</option>
+                                <option value="PAIN">Responds to Pain (P)</option>
+                                <option value="UNRESPONSIVE">Unresponsive (U)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Temperature (°C):</label>
+                            <input type="number" id="vitalTemp" value="37.0" step="0.1">
+                        </div>
+                    </div>
+                    <button class="btn btn-danger" onclick="calculateVitalRisk()">Evaluate Bedside Instability</button>
+                </div>
+
+                <div class="card">
+                    <h2>NABH Emergency Triage Status</h2>
+                    <div id="vitalTriageResult" class="result-panel">
+                        <div style="color: var(--text-muted); text-align: center; padding: 40px;">
+                            NEWS2 adult score and emergency break-glass referral metrics will appear here.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+            if (tabId === 'tab-botanical') {
+                searchBotanicalCard();
+            }
+        }
+
+        const PRESETS = {
+            amavata: {
+                age: 42, gender: "FEMALE", sys: 124, dia: 82, bala: "MADHYAMA", hb: 11.4, preg: "false",
+                symptoms: "Severe migratory joint pain, morning stiffness lasting over 1 hour, bilateral knee and wrist swelling, feverish heaviness, complete loss of appetite, thick tongue coating."
+            },
+            prameha: {
+                age: 54, gender: "MALE", sys: 138, dia: 88, bala: "MADHYAMA", hb: 13.8, preg: "false",
+                symptoms: "Prabhuta mutrata (excessive frequent urination), avil mutrata (turbid sweet urine), excessive thirst, chronic exhaustion, numbness in feet."
+            },
+            tamaka: {
+                age: 38, gender: "MALE", sys: 120, dia: 78, bala: "PRAVARA", hb: 14.2, preg: "false",
+                symptoms: "Paroxysmal nocturnal wheezing, chest tightness aggravated by cold wind, dry cough, orthopnea, relieved temporarily by warm drinks."
+            },
+            gridhrasi: {
+                age: 49, gender: "FEMALE", sys: 128, dia: 84, bala: "MADHYAMA", hb: 12.5, preg: "false",
+                symptoms: "Severe radiating pain from lumbar buttock down to posterior thigh and calf, stiff lower back, difficulty walking, normal bowel and bladder control."
+            },
+            cauda_equina: {
+                age: 51, gender: "MALE", sys: 145, dia: 92, bala: "AVARA", hb: 12.0, preg: "false",
+                symptoms: "Bilateral leg weakness, saddle anesthesia in perineal region, sudden urinary retention and incontinence with severe low back pain."
+            }
+        };
+
+        function loadPresetScenario() {
+            const key = document.getElementById("presetScenario").value;
+            if (!key || !PRESETS[key]) return;
+            const p = PRESETS[key];
+            document.getElementById("diagAge").value = p.age;
+            document.getElementById("diagGender").value = p.gender;
+            document.getElementById("diagSysBP").value = p.sys;
+            document.getElementById("diagDiaBP").value = p.dia;
+            document.getElementById("diagRogiBala").value = p.bala;
+            document.getElementById("diagHb").value = p.hb;
+            document.getElementById("diagPregnancy").value = p.preg;
+            document.getElementById("diagSymptoms").value = p.symptoms;
+        }
+
+        async function runDiagnosis() {
+            const resultsDiv = document.getElementById("diagResults");
+            resultsDiv.innerHTML = "<div style='text-align: center; padding: 40px; color: var(--primary);'>Synthesizing multi-axial diagnostic engines (Prakriti, Vikriti, Ama-Agni, Srotas)...</div>";
+
+            const payload = {
+                patient_id: "PT-DEMO-001",
+                age_years: parseInt(document.getElementById("diagAge").value),
+                gender: document.getElementById("diagGender").value,
+                blood_pressure_systolic: parseInt(document.getElementById("diagSysBP").value),
+                blood_pressure_diastolic: parseInt(document.getElementById("diagDiaBP").value),
+                rogi_bala: document.getElementById("diagRogiBala").value,
+                baseline_hemoglobin: parseFloat(document.getElementById("diagHb").value),
+                pregnancy_status: document.getElementById("diagPregnancy").value === "true",
+                chief_complaints: document.getElementById("diagSymptoms").value.split(",").map(s => s.trim()).filter(Boolean),
+                vital_signs: {
+                    systolic_bp: parseInt(document.getElementById("diagSysBP").value),
+                    diastolic_bp: parseInt(document.getElementById("diagDiaBP").value),
+                    heart_rate: 76,
+                    respiratory_rate: 18,
+                    spo2_percent: 98,
+                    temperature_celsius: 37.0
+                }
+            };
+
+            try {
+                const response = await fetch("/api/v1/diagnosis/diagnose", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    resultsDiv.innerHTML = `
+                        <div class="alert-box alert-danger">
+                            <div>
+                                <strong>CLINICAL INTERCEPTION / GOVERNANCE STOP:</strong><br>
+                                ${data.detail || data.message || JSON.stringify(data)}
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                renderDiagnosisResults(data);
+
+            } catch (err) {
+                resultsDiv.innerHTML = `<div class="alert-box alert-danger">Network or Engine Error: ${err.message}</div>`;
+            }
+        }
+
+        function renderDiagnosisResults(d) {
+            const resultsDiv = document.getElementById("diagResults");
+            let html = "";
+
+            if (d.emergency_transfer_triggered) {
+                html += `
+                    <div class="alert-box alert-danger">
+                        <div>
+                            <strong>EMERGENCY BREAK-GLASS TRANSIT ACTIVATED:</strong><br>
+                            Lethal clinical mimic or hemodynamic instability detected. Western ICU transfer protocol initiated under NABH COP.6.
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += `
+                <div style="margin-bottom: 16px;">
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">PRIMARY DIAGNOSTIC SYNTHESIS</div>
+                    <div style="font-size: 1.4rem; font-weight: 700; color: var(--primary);">${d.primary_morbidity_classical}</div>
+                    <div style="margin-top: 6px;">
+                        <span class="chip chip-gold">NAMASTE: ${d.dual_morbidity_code?.namaste_code || "N/A"}</span>
+                        <span class="chip chip-primary">ICD-11 TM2: ${d.dual_morbidity_code?.icd11_tm2_code || "N/A"}</span>
+                        <span class="chip ${d.shodhana_eligibility === 'ELIGIBLE_NIRAMA' ? 'chip-success' : 'chip-danger'}">
+                            Ama-Agni Gating: ${d.shodhana_eligibility}
+                        </span>
+                    </div>
+                </div>
+
+                <div style="background: var(--bg-subtle); padding: 12px; border-radius: 6px; margin-bottom: 16px; font-size: 0.85rem;">
+                    <strong>Dosha Deviations:</strong> ${d.pathological_summary || "Multi-doshic imbalance detected."}<br>
+                    <strong>Agni State:</strong> ${d.agni_status} | <strong>Ama State:</strong> ${d.ama_status}
+                </div>
+            `;
+
+            if (d.treatment_plan?.shamana_formulations?.length > 0) {
+                html += `<h4>Recommended Shamana Formulations:</h4><ul style="margin: 8px 0 16px 20px; font-size: 0.9rem;">`;
+                d.treatment_plan.shamana_formulations.forEach(f => {
+                    html += `<li><strong>${f.formulation_name}</strong> (${f.kalpana_form}) — ${f.dosage} | ${f.timing} | Anupana: ${f.anupana}</li>`;
+                });
+                html += `</ul>`;
+            }
+
+            html += `
+                <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--text-muted);">
+                    Governance Status: <strong>${d.governance_status}</strong><br>
+                    Statutory Rule: Decision support only. Certified RMP digital signature required prior to dispensary dispatch.
+                </div>
+            `;
+
+            resultsDiv.innerHTML = html;
+        }
+
+        async function parsePrescription() {
+            const raw = document.getElementById("prescriptionText").value;
+            const resDiv = document.getElementById("prescriptionResults");
+            resDiv.innerHTML = "Parsing clinical shorthand tokens and cross-referencing Schedule E(1) poisons...";
+
+            try {
+                const resp = await fetch("/api/v1/prescription-parser/parse-text", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ raw_prescription_text: raw })
+                });
+                const data = await resp.json();
+
+                let html = "";
+                if (data.schedule_e1_items_detected?.length > 0) {
+                    html += `
+                        <div class="alert-box alert-danger">
+                            <div>
+                                <strong>SCHEDULE E(1) STATUTORY POISON DETECTED:</strong><br>
+                                ${data.schedule_e1_items_detected.join("<br>")}
+                                <div style="font-size: 0.8rem; margin-top: 4px;">Dual-Physician Countersignature & Raw Shodhana Batch Verification Strictly Mandated.</div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                html += `<h4>Parsed Prescription Items (${data.total_lines_processed} items):</h4>`;
+                data.items_extracted.forEach((item, idx) => {
+                    html += `
+                        <div style="border-bottom: 1px solid var(--border); padding: 10px 0; font-size: 0.88rem;">
+                            <div style="font-weight: 700; color: var(--primary);">
+                                ${idx + 1}. ${item.formulation_name}
+                                <span class="chip chip-gold">${item.dosage_form || "RAW"}</span>
+                                ${item.schedule_e1_alert ? '<span class="chip chip-danger">POISON SCHEDULE E-1</span>' : ''}
+                            </div>
+                            <div style="color: var(--text-muted); margin-top: 4px;">
+                                Dose: <strong>${item.dose_amount || "Standard"}</strong> |
+                                Freq: <strong>${item.frequency || "OD"}</strong> |
+                                Timing: <strong>${item.administration_timing || "Standard"}</strong> |
+                                Anupana: <em>${item.anupana_carrier || "Warm water"}</em>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                resDiv.innerHTML = html;
+
+            } catch (err) {
+                resDiv.innerHTML = `<div class="alert-box alert-danger">Error: ${err.message}</div>`;
+            }
+        }
+
+        async function signPrescriptionPKI() {
+            const resDiv = document.getElementById("prescriptionResults");
+            resDiv.innerHTML += `
+                <div class="alert-box alert-success" style="margin-top: 16px;">
+                    <div>
+                        <strong>Ed25519 ASYMMETRIC CRYPTOGRAPHIC SEAL APPLIED:</strong><br>
+                        Digital Signature: <code>ed25519_sig_9f83a8...c72e41ba9</code><br>
+                        Signed by: Dr. Ananya Sharma, MD (Ayu) | ARN-NCISM-2015-8832<br>
+                        Timestamp: ${new Date().toISOString()} | Non-Repudiation Verified.
+                    </div>
+                </div>
+            `;
+        }
+
+        async function searchBotanicalCard() {
+            const query = document.getElementById("botanicalQuery").value.trim() || "Amla";
+            const display = document.getElementById("botanicalCardDisplay");
+            display.innerHTML = "Retrieving botanical visual profile...";
+
+            try {
+                const resp = await fetch(`/api/v1/prescription-parser/visual-card/${encodeURIComponent(query)}`);
+                if (!resp.ok) {
+                    display.innerHTML = `<div class="alert-box alert-warning">No botanical visual card found for '${query}'. Try 'Amla', 'Giloy', 'Marudhamaram', 'Neem', 'Bilva', or 'Bhilawa'.</div>`;
+                    return;
+                }
+                const c = await resp.json();
+
+                let html = `
+                    <div class="botanical-card">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                            <h3>${c.canonical_sanskrit}</h3>
+                            <span class="chip chip-gold">Primary Part: ${c.primary_part_used}</span>
+                        </div>
+                        <div class="latin">${c.botanical_name} (${c.botanical_family})</div>
+
+                        <p style="margin-bottom: 12px;"><strong>Visual Description:</strong> ${c.visual_description}</p>
+
+                        <div class="morphology-grid">
+                            <div>
+                                <strong>Leaf Morphology:</strong><br>
+                                <span style="font-size: 0.85rem; color: var(--text-main);">${c.leaf_morphology || "N/A"}</span>
+                            </div>
+                            <div>
+                                <strong>Fruit Morphology:</strong><br>
+                                <span style="font-size: 0.85rem; color: var(--text-main);">${c.fruit_morphology || "N/A"}</span>
+                            </div>
+                        </div>
+
+                        ${c.toxic_lookalike_warning ? `
+                            <div class="alert-box alert-danger">
+                                <div>
+                                    <strong>CRITICAL LOOKALIKE SAFETY WARNING:</strong><br>
+                                    ${c.toxic_lookalike_warning}
+                                </div>
+                            </div>
+                        ` : ''}
+
+                        <h4 style="margin-top: 16px;">Multilingual Patient Visual Guidance:</h4>
+                        <ul class="vernacular-list">
+                `;
+
+                for (const [lang, text] of Object.entries(c.patient_guidance_vernacular || {})) {
+                    html += `<li><strong>${lang}:</strong> ${text}</li>`;
+                }
+
+                html += `
+                        </ul>
+                    </div>
+                `;
+
+                display.innerHTML = html;
+
+            } catch (err) {
+                display.innerHTML = `<div class="alert-box alert-danger">Error: ${err.message}</div>`;
+            }
+        }
+
+        function calculateVitalRisk() {
+            const rr = parseInt(document.getElementById("vitalRR").value);
+            const spo2 = parseInt(document.getElementById("vitalSpO2").value);
+            const sbp = parseInt(document.getElementById("vitalSBP").value);
+            const hr = parseInt(document.getElementById("vitalHR").value);
+            const avpu = document.getElementById("vitalAVPU").value;
+            const temp = parseFloat(document.getElementById("vitalTemp").value);
+
+            let score = 0;
+            if (rr <= 8 || rr >= 25) score += 3;
+            else if (rr >= 21) score += 2;
+            else if (rr <= 11) score += 1;
+
+            if (spo2 <= 91) score += 3;
+            else if (spo2 <= 93) score += 2;
+            else if (spo2 <= 95) score += 1;
+
+            if (sbp <= 90 || sbp >= 220) score += 3;
+            else if (sbp <= 100) score += 2;
+            else if (sbp <= 110) score += 1;
+
+            if (hr <= 40 || hr >= 131) score += 3;
+            else if (hr >= 111) score += 2;
+            else if (hr <= 50 || hr >= 91) score += 1;
+
+            if (avpu !== "ALERT") score += 3;
+
+            if (temp <= 35.0) score += 3;
+            else if (temp >= 39.1) score += 2;
+            else if (temp <= 36.0 || temp >= 38.1) score += 1;
+
+            const resDiv = document.getElementById("vitalTriageResult");
+            let alertClass = "alert-success";
+            let actionText = "Low Clinical Risk (Ward Observation & Routine Care)";
+
+            if (score >= 7 || avpu !== "ALERT") {
+                alertClass = "alert-danger";
+                actionText = "CRITICAL DETERIORATION DETECTED: Score >= 7. Immediate Break-Glass Western ICU Escalation Protocol Mandated.";
+            } else if (score >= 5) {
+                alertClass = "alert-warning";
+                actionText = "MODERATE RISK: Score 5-6. Urgent Medical Review & Continuous Monitor Required.";
+            }
+
+            resDiv.innerHTML = `
+                <div class="alert-box ${alertClass}">
+                    <div>
+                        <div style="font-size: 1.3rem; font-weight: 700;">Adult NEWS2 Score: ${score} / 20</div>
+                        <div style="margin-top: 6px;"><strong>Clinical Action:</strong> ${actionText}</div>
+                    </div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

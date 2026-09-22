@@ -2,7 +2,8 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
+import os
 from config.settings import get_settings
 from core.database import init_database
 from core.exceptions import ClinicalGovernanceException
@@ -72,11 +73,23 @@ def root():
         ],
         "status": "OPERATIONAL",
         "api_v1_health": "/api/v1/health",
+        "clinical_cockpit": "/cockpit",
         "api_docs": "/docs"
     }
 
 
+@app.get("/cockpit", response_class=HTMLResponse, tags=["Clinical Cockpit"])
+def clinical_cockpit_dashboard():
+    """Serves the unified, offline-first clinical cockpit web interface for clinicians."""
+    cockpit_file = os.path.join(os.path.dirname(__file__), "static", "cockpit", "index.html")
+    if os.path.exists(cockpit_file):
+        with open(cockpit_file, "r", encoding="utf-8") as f:
+            return f.read()
+    return HTMLResponse("<h1>Clinical Cockpit Under Initialization</h1>", status_code=503)
+
+
 app.include_router(api_v1_router)
+
 
 
 if __name__ == "__main__":

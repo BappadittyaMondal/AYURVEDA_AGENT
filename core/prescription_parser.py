@@ -349,6 +349,90 @@ MEDICINE_TREE_VERNACULAR_REGISTRY: List[Dict[str, Any]] = [
             ("indian bdellium", "Common English"),
         ]
     },
+    {
+        "canonical_sanskrit": "Bhallataka",
+        "botanical_binomial": "Semecarpus anacardium L.f.",
+        "botanical_family": "Anacardiaceae",
+        "is_schedule_e1": True,
+        "aliases": [
+            ("bhallataka", "Sanskrit"),
+            ("bhilawa", "Hindi / Bengali"),
+            ("marking nut", "Common English"),
+            ("serankottai", "Tamil"),
+            ("jeedivittulu", "Telugu"),
+            ("cherkkuru", "Malayalam"),
+            ("geru kayi", "Kannada"),
+            ("bhelata", "Odia"),
+            ("bhilava", "Gujarati / Marathi"),
+        ]
+    },
+    {
+        "canonical_sanskrit": "Jayapala",
+        "botanical_binomial": "Croton tiglium L.",
+        "botanical_family": "Euphorbiaceae",
+        "is_schedule_e1": True,
+        "aliases": [
+            ("jayapala", "Sanskrit"),
+            ("jamalgota", "Hindi / Bengali / Marathi"),
+            ("croton", "Common English"),
+            ("purging croton", "Common English"),
+            ("nervalam", "Tamil"),
+            ("nepalamu", "Telugu"),
+            ("neervalam", "Malayalam"),
+            ("japala", "Kannada"),
+        ]
+    },
+    {
+        "canonical_sanskrit": "Dhattura",
+        "botanical_binomial": "Datura metel L.",
+        "botanical_family": "Solanaceae",
+        "is_schedule_e1": True,
+        "aliases": [
+            ("dhattura", "Sanskrit"),
+            ("dhatura", "Hindi / Bengali / Punjabi"),
+            ("thorn apple", "Common English"),
+            ("datura", "Common English"),
+            ("ummathai", "Tamil / Malayalam"),
+            ("ummetta", "Telugu"),
+            ("ummata", "Kannada"),
+            ("dhaturo", "Gujarati"),
+        ]
+    },
+    {
+        "canonical_sanskrit": "Gunja",
+        "botanical_binomial": "Abrus precatorius L.",
+        "botanical_family": "Fabaceae",
+        "is_schedule_e1": True,
+        "aliases": [
+            ("gunja", "Sanskrit / Marathi / Bengali"),
+            ("ratti", "Hindi / Punjabi"),
+            ("jequirity", "Common English"),
+            ("rosary pea", "Common English"),
+            ("kundumani", "Tamil"),
+            ("gurivinda", "Telugu"),
+            ("kunni kuru", "Malayalam"),
+            ("gulaganji", "Kannada"),
+        ]
+    },
+    {
+        "canonical_sanskrit": "Arka",
+        "botanical_binomial": "Calotropis procera (Aiton) W.T.Aiton",
+        "botanical_family": "Apocynaceae",
+        "is_schedule_e1": True,
+        "aliases": [
+            ("arka", "Sanskrit"),
+            ("aak", "Hindi / Punjabi"),
+            ("madar", "Hindi"),
+            ("akanda", "Bengali"),
+            ("calotropis", "Common English"),
+            ("crown flower", "Common English"),
+            ("erukku", "Tamil / Malayalam"),
+            ("jilledu", "Telugu"),
+            ("ekke", "Kannada"),
+            ("rui", "Marathi"),
+            ("aakado", "Gujarati"),
+        ]
+    },
 ]
 
 # Quick lookup index for vernacular aliases
@@ -555,8 +639,17 @@ def parse_prescription_line(raw_line: str) -> ParsedPrescriptionItem:
     sched_e1 = False
     if matched_herb and matched_herb.is_schedule_e1_poison:
         sched_e1 = True
-    elif any(p in line.upper() for p in ["VATSANABHA", "BHALLATAKA", "KUPILU", "KUCHLA", "BHILAWA", "BACHNAG"]):
-        sched_e1 = True
+    else:
+        text_to_check = f"{raw_line} {line} {cleaned_name}".upper()
+        sched_e1_tokens = [
+            "VATSANABHA", "BHALLATAKA", "KUPILU", "KUCHLA", "BHILAWA", "BACHNAG",
+            "JAYAPALA", "JAMALGOTA", "DHATTURA", "DATURA", "HINGULA", "CINNABAR",
+            "HARATALA", "MANASHILA", "GUNJA", "ARKA", "CROTON", "SCHEDULE E-1",
+            "SCHEDULE E1", "SCHEDULE_E1", "SNUHI", "LANGALI", "KARAVEERA", "AHIPHENA",
+            "BHANGA", "PARASIKA_YAVANI", "SHRINGIVISHA", "RASA_KARPURA", "GIRIKARNA"
+        ]
+        if any(p in text_to_check for p in sched_e1_tokens):
+            sched_e1 = True
 
     return ParsedPrescriptionItem(
         raw_line=raw_line,
