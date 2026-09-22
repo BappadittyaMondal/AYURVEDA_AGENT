@@ -203,3 +203,81 @@ def test_prescription_parser_api_endpoints():
     assert up_data["status"] == "IMAGE_RECEIVED_FOR_MULTIMODAL_OCR"
     assert up_data["regulatory_governance"]["prescriber_arn_attached"] == "ARN-NCISM-2015-8832"
 
+    # 6. Visual cards list endpoint
+    vc_list_resp = client.get("/api/v1/prescription-parser/visual-cards")
+    assert vc_list_resp.status_code == 200
+    assert len(vc_list_resp.json()) >= 6
+
+    # 7. Visual card by vernacular name endpoint ("Amla" -> Amalaki)
+    amla_resp = client.get("/api/v1/prescription-parser/visual-card/Amla")
+    assert amla_resp.status_code == 200
+    amla_card = amla_resp.json()
+    assert amla_card["canonical_sanskrit"] == "Amalaki"
+    assert amla_card["primary_part_used"] == "FRUIT"
+    assert "feather" in amla_card["leaf_morphology"].lower()
+    assert amla_card["visual_reference_asset_id"] == "amalaki_medicinal_fruit"
+
+
+    # 8. Visual card by vernacular name ("Giloy" -> Guduchi)
+    giloy_resp = client.get("/api/v1/prescription-parser/visual-card/Giloy")
+    assert giloy_resp.status_code == 200
+    giloy_card = giloy_resp.json()
+    assert giloy_card["canonical_sanskrit"] == "Guduchi"
+    assert "heart-shaped" in giloy_card["leaf_morphology"].lower()
+    assert "toxic" in giloy_card["toxic_lookalike_warning"].lower()
+
+
+
+def test_botanical_visual_cards_resolution():
+    """Verify botanical visual cards resolve correctly for leaves, fruits, bark, and lookalike warnings."""
+    from core.prescription_parser import get_botanical_visual_card, list_all_botanical_visual_cards
+    from models.prescription_parser import PlantPartType
+
+    # 1. Total cards registered
+    cards = list_all_botanical_visual_cards()
+    assert len(cards) >= 6
+
+    # 2. Amalaki - Fruit and leaf
+    card_amla = get_botanical_visual_card("Amalaki")
+    assert card_amla is not None
+    assert card_amla.primary_part_used == PlantPartType.FRUIT
+    assert "6 faint" in card_amla.fruit_morphology or "6 longitudinal" in card_amla.fruit_morphology
+    assert "Hindi" in card_amla.patient_guidance_vernacular
+
+    # 3. Guduchi - Stem and heart-shaped leaf via Hindi vernacular "Giloy"
+    card_giloy = get_botanical_visual_card("Giloy")
+    assert card_giloy is not None
+    assert card_giloy.canonical_sanskrit == "Guduchi"
+    assert card_giloy.primary_part_used == PlantPartType.STEM
+    assert "cordate" in card_giloy.leaf_morphology.lower()
+    assert "lenticels" in card_giloy.bark_or_stem_morphology.lower()
+    assert card_giloy.toxic_lookalike_warning is not None
+    assert "CRITICAL" in card_giloy.toxic_lookalike_warning
+
+    # 4. Arjuna - Bark and 5-winged fruit via Tamil vernacular "Marudhamaram"
+    card_arjuna = get_botanical_visual_card("Marudhamaram")
+    assert card_arjuna is not None
+    assert card_arjuna.canonical_sanskrit == "Arjuna"
+    assert card_arjuna.primary_part_used == PlantPartType.BARK
+    assert "5-winged" in card_arjuna.visual_description or "5 hard" in card_arjuna.fruit_morphology
+
+    # 5. Nimba - Sickle leaflets and toxic chinaberry lookalike warning via "Neem"
+    card_neem = get_botanical_visual_card("Neem")
+    assert card_neem is not None
+    assert card_neem.canonical_sanskrit == "Nimba"
+    assert card_neem.primary_part_used == PlantPartType.LEAF
+    assert "Melia azedarach" in card_neem.toxic_lookalike_warning
+
+    # 6. Bilva - Trifoliate leaves (Shiva Trishula) and hard-shelled bael fruit
+    card_bilva = get_botanical_visual_card("Bilva")
+    assert card_bilva is not None
+    assert card_bilva.primary_part_used == PlantPartType.FRUIT
+    assert "trifoliate" in card_bilva.leaf_morphology.lower()
+
+    # 7. Bhallataka - Jet black nut on orange cup (Schedule E-1 warning)
+    card_bhallataka = get_botanical_visual_card("Bhilawa")
+    assert card_bhallataka is not None
+    assert card_bhallataka.canonical_sanskrit == "Bhallataka"
+    assert "SCHEDULE E-1" in card_bhallataka.toxic_lookalike_warning
+
+

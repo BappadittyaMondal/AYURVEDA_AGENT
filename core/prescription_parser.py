@@ -16,8 +16,10 @@ from typing import List, Optional, Dict, Any, Tuple
 from models.bhaishajya_kalpana import KalpanaForm
 from models.prescription_parser import (
     AushadhaSevanaKala,
+    BotanicalVisualCard,
     ClinicalFrequency,
     ParsedPrescriptionItem,
+    PlantPartType,
     PrescriptionTextParseRequest,
     PrescriptionTextParseResponse,
     VernacularHerbMatch,
@@ -603,3 +605,202 @@ def parse_prescription_text(text: str) -> PrescriptionTextParseResponse:
         requires_rmp_verification=True,
         governance_status="DRAFT_PARSED_PRESCRIPTION"
     )
+
+
+# ==============================================================================
+# 5. BOTANICAL VISUAL IDENTIFICATION CARDS FOR PATIENT EDUCATION
+# ==============================================================================
+
+BOTANICAL_VISUAL_CARDS: List[BotanicalVisualCard] = [
+    BotanicalVisualCard(
+        herb_id="HERB-AMALAKI",
+        canonical_sanskrit="Amalaki",
+        botanical_name="Phyllanthus emblica L. (syn. Emblica officinalis Gaertn.)",
+        botanical_family="Phyllanthaceae",
+        primary_part_used=PlantPartType.FRUIT,
+        visual_description="Sub-globose, smooth, pale greenish-yellow translucent fruit with 6 faint vertical suture lines, borne on feathery pinnate leafy branchlets.",
+        leaf_morphology="Delicate, light-green, feather-like pinnate foliage (closely resembling tamarind leaves), with 10-30 pairs of linear-oblong leaflets.",
+        fruit_morphology="Round, fleshy, pale green-yellow berries (1.5 - 2.5 cm diameter) with 6 longitudinal grooves/striations and a hard 6-valved inner seed stone.",
+        bark_or_stem_morphology="Pale greyish-brown peeling bark in irregular flakes, exposing pinkish inner bark.",
+        key_identification_markers=[
+            "Translucent pale yellow-green spherical fruit with 6 faint vertical ribs",
+            "Feather-like pinnate leaves with tiny oblong leaflets resembling tamarind",
+            "Distinctly sour and astringent initial taste turning sweet after drinking water (Madhura vipaka)",
+        ],
+        toxic_lookalike_warning="Do not confuse with wild Phyllanthus or Securinega species which have small, opaque, bitter inedible white/red berries.",
+        patient_guidance_vernacular={
+            "Hindi": "आंवला का फल गोल, हल्का पीला-हरा और 6 धारियों वाला होता है। पत्तियां इमली जैसी बारीक और पंख जैसी होती हैं।",
+            "Bengali": "আমলকীর ফল গোল, হালকা সবুজ-হলুদ এবং ৬টি স্পষ্ট দাগ থাকে। পাতাগুলো তেঁতুল পাতার মতো ছোট ছোট হয়।",
+            "Tamil": "நெல்லிக்காய் (நெல்லி) உருண்டையாகவும், வெளிர் பச்சை-மஞ்சள் நிறமாகவும் 6 கோடுகளுடன் இருக்கும்.",
+            "Telugu": "ఉసిరికాయ గుండ్రంగా, లేత పసుపు-ఆకుపచ్చ రంగులో 6 గీతలతో ఉంటుంది.",
+            "English": "Round, translucent greenish-yellow fruit with 6 faint vertical ribs, growing on feathery pinnate leaves.",
+        },
+        visual_reference_asset_id="amalaki_medicinal_fruit",
+        visual_reference_prompt="Close-up photograph of Amalaki branch with feathery pinnate leaves and round ribbed translucent green fruits.",
+    ),
+    BotanicalVisualCard(
+        herb_id="HERB-GUDUCHI",
+        canonical_sanskrit="Guduchi",
+        botanical_name="Tinospora cordifolia (Willd.) Miers",
+        botanical_family="Menispermaceae",
+        primary_part_used=PlantPartType.STEM,
+        visual_description="Deciduous woody climbing succulent vine with lush green cordate (heart-shaped) leaves and warty corky stem bark.",
+        leaf_morphology="Prominently cordate (heart-shaped), membranous, 7-9 palmate basal veins radiating from the petiole junction.",
+        fruit_morphology="Clusters of small spherical drupes turning scarlet red when ripe.",
+        bark_or_stem_morphology="Woody, succulent climbing stems with light grey to brown papery bark covered in prominent raised round lenticels (warty tubercles).",
+        key_identification_markers=[
+            "Distinct heart-shaped (cordate) leaves with 7 to 9 prominent radiating veins",
+            "Succulent woody climbing vine with characteristic warty lenticels on grey bark",
+            "Greenish mucilaginous bitter inner stem when snapped or peeled",
+        ],
+        toxic_lookalike_warning="CRITICAL LIFE-SAFETY WARNING: Do not confuse with toxic Menispermum or Stephania glabra climbing vines which have similar heart-shaped leaves but lack the characteristic warty corky lenticels on the stem.",
+        patient_guidance_vernacular={
+            "Hindi": "गिलोय की पत्तियां दिल (पान) के आकार की होती हैं और इसकी बेल के तने पर गोल-गोल मस्से जैसे दाने (लेंटिसेल) होते हैं।",
+            "Bengali": "গুলঞ্চের পাতা পানের মতো হৃদপিণ্ডাকৃতি এবং ডাটার গায়ে ছোট ছোট গুটির মতো দাগ থাকে।",
+            "Tamil": "சீந்தில் கொடி இலைகள் இதய வடிவத்தில் இருக்கும், தண்டில் மரு போன்ற தடிப்புகள் காணப்படும்.",
+            "Telugu": "తిప్పతీగ ఆకులు గుండె ఆకారంలో ఉంటాయి మరియు కాండంపై చిన్న గడ్డలు ఉంటాయి.",
+            "English": "Heart-shaped leaves with prominent palmate veins and climbing vine with warty corky lenticels.",
+        },
+        visual_reference_asset_id="guduchi_medicinal_leaf",
+        visual_reference_prompt="Close-up photograph of Guduchi climbing vine showing lush green cordate (heart-shaped) leaves and warty stem lenticels.",
+    ),
+    BotanicalVisualCard(
+        herb_id="HERB-ARJUNA",
+        canonical_sanskrit="Arjuna",
+        botanical_name="Terminalia arjuna (Roxb. ex DC.) Wight & Arn.",
+        botanical_family="Combretaceae",
+        primary_part_used=PlantPartType.BARK,
+        visual_description="Massive buttressed riverbank tree with smooth pinkish-grey peeling bark and 5-winged woody fruits.",
+        leaf_morphology="Sub-opposite, oblong or elliptic leathery leaves (10-15 cm) with two characteristic green glands at the base of the blade near petiole.",
+        fruit_morphology="Ovoid-oblong fibrous woody drupe (2.5-5 cm) with 5 hard, narrow, striated longitudinal wings.",
+        bark_or_stem_morphology="Smooth, silvery-white or pinkish-grey bark that exfoliates in large thin sheets, revealing reddish-pink inner bark.",
+        key_identification_markers=[
+            "Smooth flesh-pink and grey peeling sheet bark",
+            "Two distinct raised glands on the petiole just below the leaf blade",
+            "Fibrous woody fruit with 5 longitudinal wings",
+        ],
+        toxic_lookalike_warning="Distinguish from Terminalia tomentosa (Asana) which has dark blackish deeply furrowed 'crocodile skin' bark instead of smooth pinkish peeling bark.",
+        patient_guidance_vernacular={
+            "Hindi": "अर्जुन का पेड़ नदी-नालों के किनारे होता है। इसकी छाल चिकनी, गुलाबी-सफेद और छिलकेदार होती है। पत्ती के डंठल के पास दो हरी गांठें होती हैं।",
+            "Bengali": "অর্জুন গাছের ছাল মসৃণ, ধূসর-গোলাপি এবং খসে পড়ে। পাতার বোঁটার কাছে দুটি ছোট গ্রন্থি থাকে।",
+            "Tamil": "மருத மரம் மென்மையான சாம்பல்-இளஞ்சிவப்பு பட்டையைக் கொண்டது. இலைக்காம்பில் இரண்டு சுரப்பிகள் இருக்கும்.",
+            "Telugu": "తెల్ల మద్ది చెట్టు బెరడు నునుపుగా గులాబీ-బూడిద రంగులో ఉంటుంది.",
+            "English": "Smooth pinkish-grey peeling bark with two distinctive glands at petiole base and 5-winged fruits.",
+        },
+        visual_reference_asset_id="arjuna_medicinal_tree",
+        visual_reference_prompt="Smooth pinkish-grey peeling trunk bark of Terminalia arjuna tree with leathery leaves and 5-winged fruit.",
+    ),
+    BotanicalVisualCard(
+        herb_id="HERB-NIMBA",
+        canonical_sanskrit="Nimba",
+        botanical_name="Azadirachta indica A. Juss.",
+        botanical_family="Meliaceae",
+        primary_part_used=PlantPartType.LEAF,
+        visual_description="Medium to large evergreen tree with curved, sickle-shaped, sharply serrated pinnate leaflets and intensely bitter taste.",
+        leaf_morphology="Imparipinnate compound leaves with 20-30 distinctly asymmetric, falcate (curved like a sickle), sharply toothed leaflets.",
+        fruit_morphology="Smooth green ellipsoid drupe, turning bright yellow upon ripening, containing sweetish-bitter pulp and one seed.",
+        bark_or_stem_morphology="Hard, dark grey-brown, deeply cracked with longitudinal fissures.",
+        key_identification_markers=[
+            "Curved sickle-shaped leaflets with asymmetrical bases and sharp saw-tooth margins",
+            "Intensely bitter aroma and taste throughout all plant tissues",
+            "Yellow oval fruits hanging in loose axillary panicles",
+        ],
+        toxic_lookalike_warning="CRITICAL CAUTION: Do not confuse with Persian Lilac / Chinaberry (Melia azedarach / Bakayan) which has bipinnate leaves and toxic neurotoxic berries.",
+        patient_guidance_vernacular={
+            "Hindi": "नीम की पत्तियां मुड़ी हुई हंसिया जैसी और किनारों पर आरी जैसे दांतों वाली होती हैं। बकायन से सावधान रहें जिसकी पत्तियां दुगनी कटी होती हैं।",
+            "Bengali": "নিম পাতার কিনারা করাতের মতো খাঁজকাটা এবং পাতা কাস্তের মতো বাঁকা হয়।",
+            "Tamil": "வேப்பிலை அரிவாள் போல வளைந்தும், விளிம்புகளில் ரம்பப் பற்கள் போன்றும் இருக்கும்.",
+            "Telugu": "వేప ఆకులు కొడవలి ఆకారంలో అంచులు రంపపు పళ్ళలా ఉంటాయి.",
+            "English": "Curved sickle-shaped serrated leaflets with intensely bitter taste; distinct from toxic Chinaberry.",
+        },
+        visual_reference_asset_id="nimba_medicinal_leaf",
+        visual_reference_prompt="Compound pinnate leaves of Azadirachta indica with asymmetric serrated curved sickle leaflets.",
+    ),
+    BotanicalVisualCard(
+        herb_id="HERB-BILVA",
+        canonical_sanskrit="Bilva",
+        botanical_name="Aegle marmelos (L.) Corrêa",
+        botanical_family="Rutaceae",
+        primary_part_used=PlantPartType.FRUIT,
+        visual_description="Thorny sacred tree with characteristic trifoliate (3 leaflets) leaves and large, hard-shelled globose green-yellow aromatic fruit.",
+        leaf_morphology="Trifoliate (strictly 3 ovate leaflets representing Shiva's Trishula), crenate margins, aromatic when crushed.",
+        fruit_morphology="Large spherical or pyriform fruit (5-15 cm diameter) with a rock-hard woody green/yellow rind, orange mucilaginous fragrant sweet pulp.",
+        bark_or_stem_morphology="Grey-brown corky bark with sharp, straight axial thorns (1-3 cm) in leaf axils.",
+        key_identification_markers=[
+            "Strictly trifoliate (group of 3) aromatic leaves",
+            "Sharp straight thorns on branches",
+            "Extremely hard woody shell fruit containing aromatic orange fibrous pulp",
+        ],
+        toxic_lookalike_warning="Distinguish from Strychnos nux-vomica (Kupilu) which produces poisonous round yellow-orange fruits with flat button seeds and simple non-trifoliate leaves.",
+        patient_guidance_vernacular={
+            "Hindi": "बेल के पेड़ में कांटे होते हैं और पत्तियां हमेशा तीन-तीन के समूह (त्रिशूल जैसे) में होती हैं। फल का छिलका पत्थर जैसा कड़ा और अंदर सुगंधित गूदा होता है।",
+            "Bengali": "বেল গাছের পাতা তিনটি করে একসাথে থাকে এবং ডালে কাঁটা থাকে। ফলের খোসা অত্যন্ত শক্ত কাঠের মতো হয়।",
+            "Tamil": "வில்வ இலைகள் எப்போதும் மூன்று இலைகளாக (சிவனின் திரிசூலம்) இருக்கும், கிளைகளில் முட்கள் இருக்கும்.",
+            "Telugu": "మారేడు ఆకులు ఎల్లప్పుడూ మూడు కలిసి ఉంటాయి మరియు చెట్టుకు ముళ్ళు ఉంటాయి.",
+            "English": "Trifoliate aromatic leaves with sharp thorns and large hard-shelled aromatic fruit.",
+        },
+        visual_reference_asset_id="bilva_medicinal_fruit",
+        visual_reference_prompt="Trifoliate leaves of Aegle marmelos with sharp spines and large hard-shelled round green Bael fruit.",
+    ),
+    BotanicalVisualCard(
+        herb_id="HERB-BHALLATAKA",
+        canonical_sanskrit="Bhallataka",
+        botanical_name="Semecarpus anacardium L.f.",
+        botanical_family="Anacardiaceae",
+        primary_part_used=PlantPartType.FRUIT,
+        visual_description="Medium tree bearing a striking black heart-shaped drupe fruit seated atop a fleshy orange-yellow cup-like receptacle (hypocarp).",
+        leaf_morphology="Large, simple, leathery, obovate-oblong leaves (20-40 cm) with prominent pale veins.",
+        fruit_morphology="Shiny, jet-black, obliquely cordate (heart-shaped) drupe (2.5 cm) attached to a swollen edible orange-yellow pear-shaped fleshy hypocarp.",
+        bark_or_stem_morphology="Dark brown rough bark exuding black acrid juice when cut.",
+        key_identification_markers=[
+            "Jet-black heart-shaped nut seated on an orange-yellow cup receptacle",
+            "Black corrosive resin between nut pericarp layers",
+            "Large leathery leaves with pale prominent parallel secondary veins",
+        ],
+        toxic_lookalike_warning="STATUTORY SCHEDULE E-1 DEADLY VESICANT POISON: The black nut contains toxic bhilawanol/urushiol which causes severe chemical blistering, dermal necrosis, and airway edema if handled without protective gloves or Shodhana.",
+        patient_guidance_vernacular={
+            "Hindi": "भिलावा का फल काले रंग का दिल जैसा होता है जो पीले-नारंगी कप के ऊपर बैठा होता है। चेतावनी: इसे बिना दस्ताने न छुएं, इसका काला रस त्वचा पर फफोले और छाले पैदा करता है!",
+            "Bengali": "ভেলা ফলের বাদামটি কুচকুচে কালো এবং একটি হলুদ-কমলা মাংসল অংশের উপর বসানো থাকে। সাবধান: এর কালো রস ত্বকে ফোস্কা ফেলে দেয়।",
+            "Tamil": "சேரங்கொட்டை கருப்பு நிறத்தில் இருக்கும். எச்சரிக்கை: இதன் கருப்பு பால் பட்டால் தோலில் கொப்புளங்கள் ஏற்படும்.",
+            "Telugu": "జీడిగింజలు నల్లగా గుండె ఆకారంలో ఉంటాయి. హెచ్చరిక: దీని నల్లని పాలు చర్మంపై బొబ్బలు పుట్టిస్తాయి.",
+            "English": "Jet black cordate nut seated on fleshy orange receptacle. Warning: Extremely caustic blistering resin.",
+        },
+        visual_reference_asset_id="bhallataka_schedule_e1_fruit",
+        visual_reference_prompt="Black heart-shaped nut of Semecarpus anacardium sitting on orange cup receptacle, marked with hazardous poison icon.",
+    ),
+]
+
+
+def get_botanical_visual_card(query: str) -> Optional[BotanicalVisualCard]:
+    """
+    Retrieves a BotanicalVisualCard by canonical Sanskrit name, botanical name,
+    herb ID, or vernacular synonym.
+    """
+    q = query.strip().lower()
+    if not q:
+        return None
+
+    # 1. Direct match in visual cards
+    for card in BOTANICAL_VISUAL_CARDS:
+        if (
+            q in card.herb_id.lower()
+            or q in card.canonical_sanskrit.lower()
+            or q in card.botanical_name.lower()
+        ):
+            return card
+
+    # 2. Check vernacular registry to map vernacular synonym to canonical name
+    resolved = resolve_vernacular_herb_or_tree(query)
+    if resolved:
+        canonical = resolved.canonical_sanskrit.lower()
+        for card in BOTANICAL_VISUAL_CARDS:
+            if canonical == card.canonical_sanskrit.lower():
+                return card
+
+    return None
+
+
+def list_all_botanical_visual_cards() -> List[BotanicalVisualCard]:
+    """Returns all registered botanical visual cards."""
+    return BOTANICAL_VISUAL_CARDS
+

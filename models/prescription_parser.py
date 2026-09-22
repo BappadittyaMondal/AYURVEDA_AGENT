@@ -89,3 +89,33 @@ class HandwrittenImageUploadRequest(BaseModel):
     prescriber_arn: Optional[str] = Field(default=None, description="Attending NCISM practitioner ARN")
     patient_id: Optional[str] = Field(default=None, description="Patient hospital registration identifier")
 
+
+class PlantPartType(str, Enum):
+    LEAF = "LEAF"              # Patra
+    FRUIT = "FRUIT"            # Phala
+    BARK = "BARK"              # Twak
+    ROOT = "ROOT"              # Mula
+    STEM = "STEM"              # Kanda
+    FLOWER = "FLOWER"          # Pushpa
+    SEED = "SEED"              # Beeja
+    WHOLE_PLANT = "WHOLE_PLANT"# Panchanga
+
+
+class BotanicalVisualCard(BaseModel):
+    """Visual identification profile for educating patients on medicinal plants, leaves, and fruits."""
+    herb_id: str
+    canonical_sanskrit: str
+    botanical_name: str
+    botanical_family: str
+    primary_part_used: PlantPartType
+    visual_description: str
+    leaf_morphology: Optional[str] = None
+    fruit_morphology: Optional[str] = None
+    bark_or_stem_morphology: Optional[str] = None
+    key_identification_markers: List[str] = Field(default_factory=list)
+    toxic_lookalike_warning: Optional[str] = None
+    patient_guidance_vernacular: Dict[str, str] = Field(default_factory=dict)
+    visual_reference_asset_id: str
+    visual_reference_prompt: str
+
+

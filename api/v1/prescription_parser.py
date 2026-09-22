@@ -7,18 +7,22 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List, Dict, Any
 
 from models.prescription_parser import (
+    BotanicalVisualCard,
     HandwrittenImageUploadRequest,
     PrescriptionTextParseRequest,
     PrescriptionTextParseResponse,
     VernacularHerbMatch,
 )
 from core.prescription_parser import (
+    get_botanical_visual_card,
+    list_all_botanical_visual_cards,
     parse_prescription_text,
     resolve_vernacular_herb_or_tree,
     DOSAGE_FORM_PATTERNS,
     FREQUENCY_PATTERNS,
     TIMING_PATTERNS,
 )
+
 
 router = APIRouter(prefix="/prescription-parser", tags=["Prescription Shorthand & Vernacular NLP"])
 
@@ -100,3 +104,29 @@ def ingest_handwritten_prescription_image(
             "Pharmacist or Physician manual review is mandatory prior to pharmacy dispatch."
         ),
     }
+
+
+@router.get("/visual-cards", response_model=List[BotanicalVisualCard])
+def get_all_botanical_visual_cards() -> List[BotanicalVisualCard]:
+    """
+    Returns the comprehensive gallery of botanical visual identification cards
+    for patient education on medicinal fruits, leaves, barks, and trees.
+    """
+    return list_all_botanical_visual_cards()
+
+
+@router.get("/visual-card/{query}", response_model=BotanicalVisualCard)
+def get_botanical_visual_card_by_name(query: str) -> BotanicalVisualCard:
+    """
+    Retrieves a specific botanical visual identification card by Sanskrit name, botanical binomial,
+    or regional vernacular synonym (e.g. 'Amla', 'Giloy', 'Neem', 'Kahu', 'Marudhamaram', 'Bael').
+    Provides leaf/fruit morphology, visual cues, patient-friendly guidance, and toxic lookalike warnings.
+    """
+    card = get_botanical_visual_card(query)
+    if not card:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No botanical visual identification card found matching '{query}'."
+        )
+    return card
+
